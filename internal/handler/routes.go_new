@@ -1,0 +1,46 @@
+package handler
+
+import (
+        "net/http"
+        "log"
+        "github.com/gin-contrib/cors"
+        "github.com/gin-gonic/gin"
+)
+
+
+func NewServer() *http.Server {
+        srv := httpgrace.NewServer(NewServer.registerRoutes(),
+            httpgrace.WithServerOptions(
+                httpgrace.WithReadTimeout(10*time.Second),
+                httpgrace.WithWriteTimeout(10*time.Second),
+                httpgrace.WithIdleTimeout(120*time.Second),
+                // or with your custom ServerOption
+                func(srv *http.Server) {
+                    srv.ErrorLog = log.New(os.Stdout, "", 0)
+                },
+            ),
+        )
+
+        return srv
+}
+
+func registerRoutes() http.Handler {
+        r := gin.Default()
+
+        r.Use(cors.New(cors.Config{
+                //AllowOrigins:     []string{"http://localhost:5173"}, // Add your frontend URL
+                AllowOrigins:     []string{"*"}, // Add your frontend URL
+                AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+                AllowHeaders:     []string{"Accept", "Authorization", "Content-Type"},
+                AllowCredentials: true, // Enable cookies/auth
+        }))
+
+        r.GET("/health", healthHandler)
+
+        return r
+}
+
+func healthHandler(c *gin.Context) {
+        log.Printf("called health")
+        c.JSON(http.StatusOK, "{}")
+}

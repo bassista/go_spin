@@ -1,0 +1,14 @@
+services:
+  api:
+    container_name: gospin
+    image: gospin
+    ports:
+      - 8083:8083
+    volumes:
+      - ./:/app
+    build:
+      dockerfile: dev.Dockerfile
+    deploy:
+     resources:
+      limits:
+        cpus: '2'
