@@ -8,7 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func NewGroupRouter(timeout time.Duration, group *gin.RouterGroup, store *cache.Store) {
+func NewGroupRouter(timeout time.Duration, group *gin.RouterGroup, store cache.GroupStore) {
 	gc := controller.NewGroupController(store)
 	group.GET("groups", gc.AllGroups)
+	group.POST("group", gc.CreateOrUpdateGroup)
+	group.DELETE("group/:name", gc.DeleteGroup)
 }

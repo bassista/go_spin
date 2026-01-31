@@ -2,8 +2,10 @@ services:
   api:
     container_name: gospin
     image: gospin
+    environment:
+      - PORT=${PORT:-8083}
     ports:
-      - 8083:8083
+      - "${PORT:-8083}:${PORT:-8083}"
     volumes:
       - ./:/app
     build:

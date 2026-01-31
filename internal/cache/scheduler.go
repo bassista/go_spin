@@ -13,8 +13,8 @@ import (
 // On ctx.Done, it performs a final flush before returning.
 func StartPersistenceScheduler(
 	ctx context.Context,
-	store *Store,
-	repo *repository.JSONRepository,
+	store PersistableStore,
+	repo repository.Saver,
 	interval time.Duration,
 ) {
 	logger := log.New(os.Stdout, "[persist] ", log.LstdFlags)
@@ -36,7 +36,7 @@ func StartPersistenceScheduler(
 }
 
 // flushCache persists the cache to disk if dirty, using optimistic locking.
-func flushCache(store *Store, repo *repository.JSONRepository, logger *log.Logger) {
+func flushCache(store PersistableStore, repo repository.Saver, logger *log.Logger) {
 	if !store.IsDirty() {
 		return
 	}

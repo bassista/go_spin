@@ -2,10 +2,15 @@ package cache
 
 import (
 	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/bassista/go_spin/internal/repository"
 )
+
+var ErrContainerNotFound = errors.New("container not found")
+var ErrGroupNotFound = errors.New("group not found")
+var ErrScheduleNotFound = errors.New("schedule not found")
 
 // Store keeps an in-memory copy of the data document.
 type Store struct {
@@ -118,6 +123,167 @@ func (s *Store) AddContainer(container repository.Container) (repository.DataDoc
 	return cloneData(s.data)
 }
 
+// RemoveContainer deletes a container by name and removes it from the order list.
+func (s *Store) RemoveContainer(name string) (repository.DataDocument, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx := -1
+	for i := range s.data.Containers {
+		if s.data.Containers[i].Name == name {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return repository.DataDocument{}, ErrContainerNotFound
+	}
+
+	// Remove from Containers slice
+	s.data.Containers = append(s.data.Containers[:idx], s.data.Containers[idx+1:]...)
+
+	// Remove from Order slice
+	for i := 0; i < len(s.data.Order); i++ {
+		if s.data.Order[i] == name {
+			s.data.Order = append(s.data.Order[:i], s.data.Order[i+1:]...)
+			i--
+		}
+	}
+
+	// Mark cache as dirty after mutation
+	s.dirty = true
+
+	return cloneData(s.data)
+}
+
+// AddGroup upserts a group by name, updating group order and returning the new snapshot.
+func (s *Store) AddGroup(group repository.Group) (repository.DataDocument, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	clonedGroup, err := cloneGroup(group)
+	if err != nil {
+		return repository.DataDocument{}, err
+	}
+
+	inOrder := false
+	for _, name := range s.data.GroupOrder {
+		if name == clonedGroup.Name {
+			inOrder = true
+			break
+		}
+	}
+
+	replaced := false
+	for i := range s.data.Groups {
+		if s.data.Groups[i].Name == clonedGroup.Name {
+			s.data.Groups[i] = clonedGroup
+			replaced = true
+			break
+		}
+	}
+
+	if !replaced {
+		s.data.Groups = append(s.data.Groups, clonedGroup)
+	}
+
+	if !inOrder {
+		s.data.GroupOrder = append(s.data.GroupOrder, clonedGroup.Name)
+	}
+
+	// Mark cache as dirty after mutation
+	s.dirty = true
+
+	return cloneData(s.data)
+}
+
+// RemoveGroup deletes a group by name and removes it from the group order list.
+func (s *Store) RemoveGroup(name string) (repository.DataDocument, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx := -1
+	for i := range s.data.Groups {
+		if s.data.Groups[i].Name == name {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return repository.DataDocument{}, ErrGroupNotFound
+	}
+
+	// Remove from Groups slice
+	s.data.Groups = append(s.data.Groups[:idx], s.data.Groups[idx+1:]...)
+
+	// Remove from GroupOrder slice
+	for i := 0; i < len(s.data.GroupOrder); i++ {
+		if s.data.GroupOrder[i] == name {
+			s.data.GroupOrder = append(s.data.GroupOrder[:i], s.data.GroupOrder[i+1:]...)
+			i--
+		}
+	}
+
+	// Mark cache as dirty after mutation
+	s.dirty = true
+
+	return cloneData(s.data)
+}
+
+// AddSchedule upserts a schedule by id and returns the new snapshot.
+func (s *Store) AddSchedule(schedule repository.Schedule) (repository.DataDocument, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	clonedSchedule, err := cloneSchedule(schedule)
+	if err != nil {
+		return repository.DataDocument{}, err
+	}
+
+	replaced := false
+	for i := range s.data.Schedules {
+		if s.data.Schedules[i].ID == clonedSchedule.ID {
+			s.data.Schedules[i] = clonedSchedule
+			replaced = true
+			break
+		}
+	}
+
+	if !replaced {
+		s.data.Schedules = append(s.data.Schedules, clonedSchedule)
+	}
+
+	// Mark cache as dirty after mutation
+	s.dirty = true
+
+	return cloneData(s.data)
+}
+
+// RemoveSchedule deletes a schedule by id.
+func (s *Store) RemoveSchedule(id string) (repository.DataDocument, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx := -1
+	for i := range s.data.Schedules {
+		if s.data.Schedules[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return repository.DataDocument{}, ErrScheduleNotFound
+	}
+
+	// Remove from Schedules slice
+	s.data.Schedules = append(s.data.Schedules[:idx], s.data.Schedules[idx+1:]...)
+
+	// Mark cache as dirty after mutation
+	s.dirty = true
+
+	return cloneData(s.data)
+}
+
 // cloneData deep-copies the document to avoid shared slices between cache and callers.
 func cloneData(doc repository.DataDocument) (repository.DataDocument, error) {
 	bytes, err := json.Marshal(doc)
@@ -140,6 +306,32 @@ func cloneContainer(c repository.Container) (repository.Container, error) {
 	var copy repository.Container
 	if err := json.Unmarshal(bytes, &copy); err != nil {
 		return repository.Container{}, err
+	}
+	return copy, nil
+}
+
+// cloneGroup deep-copies a group to avoid shared slices/pointer fields.
+func cloneGroup(g repository.Group) (repository.Group, error) {
+	bytes, err := json.Marshal(g)
+	if err != nil {
+		return repository.Group{}, err
+	}
+	var copy repository.Group
+	if err := json.Unmarshal(bytes, &copy); err != nil {
+		return repository.Group{}, err
+	}
+	return copy, nil
+}
+
+// cloneSchedule deep-copies a schedule to avoid shared slices/pointer fields.
+func cloneSchedule(s repository.Schedule) (repository.Schedule, error) {
+	bytes, err := json.Marshal(s)
+	if err != nil {
+		return repository.Schedule{}, err
+	}
+	var copy repository.Schedule
+	if err := json.Unmarshal(bytes, &copy); err != nil {
+		return repository.Schedule{}, err
 	}
 	return copy, nil
 }

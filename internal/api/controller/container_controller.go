@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/bassista/go_spin/internal/cache"
@@ -10,11 +11,11 @@ import (
 )
 
 type ContainerController struct {
-	store     *cache.Store
+	store     cache.ContainerStore
 	validator *validator.Validate
 }
 
-func NewContainerController(store *cache.Store) *ContainerController {
+func NewContainerController(store cache.ContainerStore) *ContainerController {
 	validator := validator.New()
 	return &ContainerController{store: store, validator: validator}
 }
@@ -47,6 +48,26 @@ func (cc *ContainerController) CreateOrUpdateContainer(c *gin.Context) {
 
 	updatedDoc, err := cc.store.AddContainer(container)
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update cache"})
+		return
+	}
+
+	c.JSON(http.StatusOK, updatedDoc.Containers)
+}
+
+func (cc *ContainerController) DeleteContainer(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing container name"})
+		return
+	}
+
+	updatedDoc, err := cc.store.RemoveContainer(name)
+	if err != nil {
+		if errors.Is(err, cache.ErrContainerNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "container not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update cache"})
 		return
 	}

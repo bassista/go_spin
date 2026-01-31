@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,9 +8,11 @@ import (
 	"syscall"
 
 	route "github.com/bassista/go_spin/internal/api/route"
+	appctx "github.com/bassista/go_spin/internal/app"
 	"github.com/bassista/go_spin/internal/cache"
 	"github.com/bassista/go_spin/internal/config"
 	"github.com/bassista/go_spin/internal/repository"
+	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/gin-gonic/gin"
 
 	"github.com/enrichman/httpgrace"
@@ -34,34 +35,32 @@ func main() {
 	}
 
 	cacheStore := cache.NewStore(*jsonDoc)
+	rt := runtime.NewMemoryRuntimeFromDocument(*jsonDoc)
 
-	ctx, stopWatchers := context.WithCancel(context.Background())
-	defer stopWatchers()
-
-	if err := repo.StartWatcher(ctx, cacheStore); err != nil {
-		log.Fatalf("cannot start watcher: %v", err)
+	app, err := appctx.New(cfg, repo, cacheStore, rt)
+	if err != nil {
+		log.Fatalf("cannot init app: %v", err)
 	}
+	defer app.Shutdown()
 
-	// Start scheduled persistence goroutine
-	cache.StartPersistenceScheduler(ctx, cacheStore, repo, cfg.Data.PersistInterval)
+	app.StartWatchers()
 
-	gin.SetMode(cfg.Security.GinMode)
+	gin.SetMode(cfg.Misc.GinMode)
 	r := gin.Default()
 
-	route.SetupRoutes(r, cacheStore)
+	route.SetupRoutes(r, app)
+	srv := createServer(r, app)
 
-	srv := createServer(r, cfg)
-
-	fmt.Printf("App will run on port: %s\n", cfg.Server.Port)
-	if err := srv.ListenAndServe(":" + cfg.Server.Port); err != nil {
+	fmt.Printf("App will run on port: %d\n", cfg.Server.Port)
+	if err := srv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil {
 		log.Fatal(err)
 	}
 
 }
 
-func createServer(r *gin.Engine, cfg *config.Config) *httpgrace.Server {
+func createServer(r *gin.Engine, app *appctx.App) *httpgrace.Server {
 	// Set graceful shutdown timeout (default: 10 seconds)
-	httpgrace.WithTimeout(cfg.Server.ShutDownTimeout)
+	httpgrace.WithTimeout(app.Config.Server.ShutDownTimeout)
 	// Customize shutdown signals (default: SIGINT, SIGTERM)
 	httpgrace.WithSignals(syscall.SIGTERM, syscall.SIGINT)
 	// Provide custom logger (default: slog.Default())
@@ -72,9 +71,9 @@ func createServer(r *gin.Engine, cfg *config.Config) *httpgrace.Server {
 	})
 	srv := httpgrace.NewServer(r,
 		httpgrace.WithServerOptions(
-			httpgrace.WithReadTimeout(cfg.Server.ReadTimeout),
-			httpgrace.WithWriteTimeout(cfg.Server.WriteTimeout),
-			httpgrace.WithIdleTimeout(cfg.Server.IdleTimeout),
+			httpgrace.WithReadTimeout(app.Config.Server.ReadTimeout),
+			httpgrace.WithWriteTimeout(app.Config.Server.WriteTimeout),
+			httpgrace.WithIdleTimeout(app.Config.Server.IdleTimeout),
 			// or with your custom ServerOption
 			func(srv *http.Server) {
 				srv.ErrorLog = log.New(os.Stdout, "", 0)

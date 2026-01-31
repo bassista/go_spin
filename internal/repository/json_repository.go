@@ -34,7 +34,8 @@ type JSONRepository struct {
 }
 
 // NewJSONRepository creates a repository for the given JSON file path.
-func NewJSONRepository(path string) (*JSONRepository, error) {
+// It returns the repository interface to avoid leaking implementation details.
+func NewJSONRepository(path string) (Repository, error) {
 	if path == "" {
 		return nil, errors.New("data file path is required")
 	}

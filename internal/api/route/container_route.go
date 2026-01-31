@@ -8,10 +8,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func NewContainerRouter(timeout time.Duration, group *gin.RouterGroup, store *cache.Store) {
+func NewContainerRouter(timeout time.Duration, group *gin.RouterGroup, store cache.ContainerStore) {
 
 	cc := controller.NewContainerController(store)
 
 	group.GET("containers", cc.AllContainers)
 	group.POST("container", cc.CreateOrUpdateContainer)
+	group.DELETE("container/:name", cc.DeleteContainer)
 }
