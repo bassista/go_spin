@@ -14,14 +14,13 @@ go_spin is a Go application for scheduled management of Docker containers. Defin
 - **REST API**: Full JSON API for programmatic access
 - **File Watching**: Auto-reload configuration when the JSON file changes externally
 - **Graceful Shutdown**: Proper cleanup on application termination
-- **Flexible Runtime**: Support for Docker daemon or in-memory mock for testing
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - Go 1.21+ 
-- Docker (optional, can use memory runtime for testing)
+- Docker
 
 ### Installation
 
@@ -75,17 +74,17 @@ misc:
 All settings can be overridden via environment variables with prefix `GO_SPIN_`:
 
 ```bash
-# Server port (also supports PORT without prefix)
+# Server port
 PORT=8084
 
 # Gin mode
 GO_SPIN_MISC.GIN_MODE=debug
 
 # Runtime type (docker or memory for testing)
-GO_SPIN_MISC.RUNTIME_TYPE=memory
+GO_SPIN_MISC.RUNTIME_TYPE=docker
 
 # CORS allowed origins
-GO_SPIN_MISC.CORS_ALLOWED_ORIGINS=https://mydomain.com
+GO_SPIN_MISC.CORS_ALLOWED_ORIGINS=*
 
 # Config path
 GO_SPIN_CONFIG_PATH=./config
@@ -93,6 +92,7 @@ GO_SPIN_CONFIG_PATH=./config
 
 ### .env File
 
+Environment variables can be provided also via .env file.
 Create a `.env` file in the project root:
 
 ```env
@@ -100,8 +100,6 @@ PORT=8084
 GO_SPIN_MISC.GIN_MODE=debug
 GO_SPIN_MISC.RUNTIME_TYPE=memory
 ```
-
-> **Note**: The data directory is automatically created if it doesn't exist.
 
 ## 📡 API Endpoints
 
@@ -223,22 +221,6 @@ docker-compose up
 
 ```bash
 go test ./...
-```
-
-### Code Quality
-
-```bash
-# Format
-go fmt ./...
-
-# Vet
-go vet ./...
-
-# Lint (requires golangci-lint)
-golangci-lint run
-
-# Tidy dependencies
-go mod tidy
 ```
 
 ## 🏗️ Architecture
