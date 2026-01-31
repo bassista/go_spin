@@ -1,0 +1,86 @@
+{
+  "metadata": {
+    "lastUpdate": 1769792827132
+  },
+  "containers": [
+    {
+      "name": "qbittorrent",
+      "friendly_name": "qb78",
+	        "url": "http://qb.local.me",
+      "active": true,
+      "running": false,
+      "activatedAt": null
+    },
+    {
+      "name": "plex",
+      "friendly_name": "Plex",
+      "url": "https://plex:12300",
+      "running": true,
+      "active": true,
+      "activatedAt": 1766271675576
+    }
+  ],
+  "order": [
+    "qbittorrent",
+    "plex"
+  ],
+  "groups": [
+    {
+      "container": [
+        "qbittorrent",
+        "plex"
+      ],
+      "name": "Media",
+      "active": true
+    }
+  ],
+  "groupOrder": [
+    "Media"
+  ],
+  "schedules": [
+    {
+      "target": "qbittorrent",
+      "targetType": "container",
+      "timers": [],
+      "id": "1765309098671-421"
+    },
+    {
+      "target": "Media",
+      "targetType": "group",
+      "timers": [
+        {
+          "startTime": "00:00",
+          "stopTime": "00:01",
+          "days": [
+            1,
+            2,
+            5
+          ],
+          "active": true
+        }
+      ],
+      "id": "1765309248681-698"
+    },
+    {
+      "target": "plex",
+      "targetType": "container",
+      "timers": [
+        {
+          "startTime": "00:00",
+          "stopTime": "00:01",
+          "days": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "active": false
+        }
+      ],
+      "id": "1765934978194-5158"
+    }
+  ]
+}

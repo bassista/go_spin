@@ -1,2 +1,5 @@
 server:
   port: 8080
+data:
+  file_path: ./config/data/config.json
+  persist_interval_secs: 5
