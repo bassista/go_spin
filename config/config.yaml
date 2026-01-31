@@ -4,3 +4,11 @@ server:
 data:
   file_path: ./config/data/config.json
   persist_interval_secs: 5
+misc:
+  gin_mode: debug 
+  runtime_type: docker  # possible values: memory, docker
+  cors_allowed_origins: "*"   
+  log_level: info
+  log_format: text  
+    
+

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -34,11 +35,12 @@ type DataConfig struct {
 }
 
 type MiscConfig struct {
-	GinMode           string
-	SchedulingEnabled bool
-	SchedulingPoll    time.Duration
-	SchedulingTZ      string
-	RuntimeType       string // "docker" o "memory"
+	GinMode            string
+	SchedulingEnabled  bool
+	SchedulingPoll     time.Duration
+	SchedulingTZ       string
+	RuntimeType        string // "docker" o "memory"
+	CORSAllowedOrigins string // CORS allowed origins, default "*"
 }
 
 // LoadConfig loads configuration from file, env vars and validates required fields.
@@ -60,13 +62,14 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("server.write_timeout_secs", 10)
 	viper.SetDefault("server.idle_timeout_secs", 120)
 	viper.SetDefault("server.shutdown_timeout_secs", 5)
-	viper.SetDefault("data.file_path", "./config/data/config.json")
+	viper.SetDefault("data.file_path", confPath+"/data/config.json")
 	viper.SetDefault("data.persist_interval_secs", 5)
 	viper.SetDefault("misc.gin_mode", "release")
 	viper.SetDefault("misc.scheduling_enabled", true)
 	viper.SetDefault("misc.scheduling_poll_interval_secs", 30)
 	viper.SetDefault("misc.scheduling_timezone", "Local")
 	viper.SetDefault("misc.runtime_type", "docker")
+	viper.SetDefault("misc.cors_allowed_origins", "*")
 
 	// Environment variables automatically override config file values
 	viper.AutomaticEnv()
@@ -78,6 +81,15 @@ func LoadConfig() (*Config, error) {
 		} else {
 			return nil, fmt.Errorf("config file error: %w", err)
 		}
+	}
+
+	fileStorePath := viper.GetString("data.file_path")
+	log.Printf("Using configuration file: %s", fileStorePath)
+
+	// Ensure the directory for the data file exists
+	dataDir := filepath.Dir(fileStorePath)
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create data directory %s: %w", dataDir, err)
 	}
 
 	// Build immutable config struct
@@ -99,11 +111,12 @@ func LoadConfig() (*Config, error) {
 			PersistInterval: time.Duration(viper.GetInt("data.persist_interval_secs")) * time.Second,
 		},
 		Misc: MiscConfig{
-			GinMode:           viper.GetString("misc.gin_mode"),
-			SchedulingEnabled: viper.GetBool("misc.scheduling_enabled"),
-			SchedulingPoll:    time.Duration(viper.GetInt("misc.scheduling_poll_interval_secs")) * time.Second,
-			SchedulingTZ:      viper.GetString("misc.scheduling_timezone"),
-			RuntimeType:       viper.GetString("misc.runtime_type"),
+			GinMode:            viper.GetString("misc.gin_mode"),
+			SchedulingEnabled:  viper.GetBool("misc.scheduling_enabled"),
+			SchedulingPoll:     time.Duration(viper.GetInt("misc.scheduling_poll_interval_secs")) * time.Second,
+			SchedulingTZ:       viper.GetString("misc.scheduling_timezone"),
+			RuntimeType:        viper.GetString("misc.runtime_type"),
+			CORSAllowedOrigins: viper.GetString("misc.cors_allowed_origins"),
 		},
 	}
 

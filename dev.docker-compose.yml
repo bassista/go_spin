@@ -4,11 +4,13 @@ services:
     image: gospin
     environment:
       - PORT=${PORT:-8083}
+      - GO_SPIN_CONFIG_PATH=/app/config
     ports:
       - "${PORT:-8083}:${PORT:-8083}"
     volumes:
       - ./:/app
-      - /var/run/docker.sock:/var/run/docker.sock   
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/app/config
     build:
       dockerfile: dev.Dockerfile
     deploy:
