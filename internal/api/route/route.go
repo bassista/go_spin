@@ -23,5 +23,6 @@ func SetupRoutes(r *gin.Engine, appCtx *app.App) {
 	NewContainerRouter(timeout, publicRouter, appCtx.Cache)
 	NewGroupRouter(timeout, publicRouter, appCtx.Cache)
 	NewScheduleRouter(timeout, publicRouter, appCtx.Cache)
+	NewRuntimeRouter(timeout, publicRouter, appCtx.Runtime)
 
 }

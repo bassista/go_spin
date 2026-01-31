@@ -1,0 +1,289 @@
+{
+	"info": {
+		"_postman_id": "go-spin-collection",
+		"name": "go_spin API",
+		"description": "Collection to test go_spin application endpoints - scheduled Docker container management",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "containerName",
+			"value": "plex",
+			"type": "string"
+		},
+		{
+			"key": "groupName",
+			"value": "Media",
+			"type": "string"
+		},
+		{
+			"key": "scheduleId",
+			"value": "1765309098671-421",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["health"]
+						},
+						"description": "Check application health status"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Containers",
+			"item": [
+				{
+					"name": "Get All Containers",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/containers",
+							"host": ["{{baseUrl}}"],
+							"path": ["containers"]
+						},
+						"description": "Get the list of all configured containers"
+					},
+					"response": []
+				},
+				{
+					"name": "Create/Update Container",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"nginx\",\n    \"friendly_name\": \"Nginx Web Server\",\n    \"url\": \"http://nginx.local\",\n    \"running\": false,\n    \"active\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/container",
+							"host": ["{{baseUrl}}"],
+							"path": ["container"]
+						},
+						"description": "Create or update a container. If a container with the same name exists, it will be updated."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Container",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/container/{{containerName}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["container", "{{containerName}}"]
+						},
+						"description": "Delete a container by name"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Groups",
+			"item": [
+				{
+					"name": "Get All Groups",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/groups",
+							"host": ["{{baseUrl}}"],
+							"path": ["groups"]
+						},
+						"description": "Get the list of all configured groups"
+					},
+					"response": []
+				},
+				{
+					"name": "Create/Update Group",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Development\",\n    \"container\": [\"nginx\", \"redis\"],\n    \"active\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/group",
+							"host": ["{{baseUrl}}"],
+							"path": ["group"]
+						},
+						"description": "Create or update a container group"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Group",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/group/{{groupName}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["group", "{{groupName}}"]
+						},
+						"description": "Delete a group by name"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Schedules",
+			"item": [
+				{
+					"name": "Get All Schedules",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/schedules",
+							"host": ["{{baseUrl}}"],
+							"path": ["schedules"]
+						},
+						"description": "Get the list of all configured schedules"
+					},
+					"response": []
+				},
+				{
+					"name": "Create/Update Schedule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"schedule-001\",\n    \"target\": \"nginx\",\n    \"targetType\": \"container\",\n    \"timers\": [\n        {\n            \"startTime\": \"08:00\",\n            \"stopTime\": \"18:00\",\n            \"days\": [1, 2, 3, 4, 5],\n            \"active\": true\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/schedule",
+							"host": ["{{baseUrl}}"],
+							"path": ["schedule"]
+						},
+						"description": "Create or update a schedule. targetType can be 'container' or 'group'. days: 0=Sunday, 1=Monday, ..., 6=Saturday"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Schedule for Group",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"schedule-group-001\",\n    \"target\": \"Media\",\n    \"targetType\": \"group\",\n    \"timers\": [\n        {\n            \"startTime\": \"20:00\",\n            \"stopTime\": \"23:59\",\n            \"days\": [0, 6],\n            \"active\": true\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/schedule",
+							"host": ["{{baseUrl}}"],
+							"path": ["schedule"]
+						},
+						"description": "Create a schedule for a group (example: Media active on weekends from 20:00)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Schedule",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/schedule/{{scheduleId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["schedule", "{{scheduleId}}"]
+						},
+						"description": "Delete a schedule by ID"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Runtime",
+			"item": [
+				{
+					"name": "Get Container Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/runtime/{{containerName}}/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["runtime", "{{containerName}}", "status"]
+						},
+						"description": "Check if a container is currently running"
+					},
+					"response": []
+				},
+				{
+					"name": "Start Container",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/runtime/{{containerName}}/start",
+							"host": ["{{baseUrl}}"],
+							"path": ["runtime", "{{containerName}}", "start"]
+						},
+						"description": "Start a Docker container"
+					},
+					"response": []
+				},
+				{
+					"name": "Stop Container",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/runtime/{{containerName}}/stop",
+							"host": ["{{baseUrl}}"],
+							"path": ["runtime", "{{containerName}}", "stop"]
+						},
+						"description": "Stop a Docker container"
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

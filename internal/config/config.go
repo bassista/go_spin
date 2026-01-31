@@ -38,6 +38,7 @@ type MiscConfig struct {
 	SchedulingEnabled bool
 	SchedulingPoll    time.Duration
 	SchedulingTZ      string
+	RuntimeType       string // "docker" o "memory"
 }
 
 // LoadConfig loads configuration from file, env vars and validates required fields.
@@ -65,6 +66,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("misc.scheduling_enabled", true)
 	viper.SetDefault("misc.scheduling_poll_interval_secs", 30)
 	viper.SetDefault("misc.scheduling_timezone", "Local")
+	viper.SetDefault("misc.runtime_type", "docker")
 
 	// Environment variables automatically override config file values
 	viper.AutomaticEnv()
@@ -101,6 +103,7 @@ func LoadConfig() (*Config, error) {
 			SchedulingEnabled: viper.GetBool("misc.scheduling_enabled"),
 			SchedulingPoll:    time.Duration(viper.GetInt("misc.scheduling_poll_interval_secs")) * time.Second,
 			SchedulingTZ:      viper.GetString("misc.scheduling_timezone"),
+			RuntimeType:       viper.GetString("misc.runtime_type"),
 		},
 	}
 

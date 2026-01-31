@@ -1,5 +1,5 @@
 services:
-  api:
+  gospin:
     container_name: gospin
     image: gospin
     environment:
@@ -8,6 +8,7 @@ services:
       - "${PORT:-8083}:${PORT:-8083}"
     volumes:
       - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock   
     build:
       dockerfile: dev.Dockerfile
     deploy:
