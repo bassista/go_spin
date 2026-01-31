@@ -1,20 +1,26 @@
 package route
 
 import (
-	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/bassista/go_spin/internal/cache"
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 )
 
-func SetupRoutes(timeout time.Duration, r *gin.Engine, store *cache.Store, validator *validator.Validate) {
-	fmt.Println("DEBUG: SetupRoutes called!")
+func SetupRoutes(r *gin.Engine, store *cache.Store) {
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "UP",
+		})
+	})
 
 	publicRouter := r.Group("")
+
 	// All Public APIs
-	NewContainerRouter(timeout, publicRouter, store, validator)
+	timeout := time.Duration(1) * time.Second
+
+	NewContainerRouter(timeout, publicRouter, store)
 	NewGroupRouter(timeout, publicRouter, store)
 	NewScheduleRouter(timeout, publicRouter, store)
 

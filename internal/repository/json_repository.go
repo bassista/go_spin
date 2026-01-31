@@ -15,6 +15,14 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+// CacheStore defines the interface for cache operations needed by the watcher callback.
+type CacheStore interface {
+	GetLastUpdate() int64
+	IsDirty() bool
+	Snapshot() (DataDocument, error)
+	Replace(doc DataDocument) error
+}
+
 // JSONRepository handles disk persistence and watching of the data file.
 type JSONRepository struct {
 	path      string
@@ -26,7 +34,7 @@ type JSONRepository struct {
 }
 
 // NewJSONRepository creates a repository for the given JSON file path.
-func NewJSONRepository(path string, v *validator.Validate, logger *log.Logger) (*JSONRepository, error) {
+func NewJSONRepository(path string) (*JSONRepository, error) {
 	if path == "" {
 		return nil, errors.New("data file path is required")
 	}
@@ -37,10 +45,8 @@ func NewJSONRepository(path string, v *validator.Validate, logger *log.Logger) (
 		dir = "."
 	}
 
-	if logger == nil {
-		logger = log.New(os.Stdout, "[json-repo] ", log.LstdFlags)
-	}
-
+	logger := log.New(os.Stdout, "[json-repo] ", log.LstdFlags)
+	v := validator.New()
 	return &JSONRepository{path: path, dir: dir, base: base, validator: v, logger: logger}, nil
 }
 
@@ -132,7 +138,8 @@ func (r *JSONRepository) saveUnlocked(doc *DataDocument) error {
 // are still observed on Linux and Windows. Events are filtered by basename and
 // debounced to avoid double reloads on write+chmod/rename cycles. The caller owns the
 // provided context: cancel it to stop the goroutine and close the watcher cleanly.
-func (r *JSONRepository) StartWatcher(ctx context.Context, onChange func()) error {
+func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore) error {
+	onChange := r.MakeWatcherCallback(cacheStore)
 	if onChange == nil {
 		return errors.New("onChange callback is required")
 	}
@@ -196,4 +203,47 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, onChange func()) erro
 	}()
 
 	return nil
+}
+
+// MakeWatcherCallback returns a callback for file watcher that reloads cache from disk if needed.
+func (r *JSONRepository) MakeWatcherCallback(cacheStore CacheStore) func() {
+	return func() {
+		diskDoc, loadErr := r.Load()
+		if loadErr != nil {
+			r.logger.Printf("watch reload failed: %v", loadErr)
+			return
+		}
+		cacheLastUpdate := cacheStore.GetLastUpdate()
+		diskLastUpdate := diskDoc.Metadata.LastUpdate
+
+		// If disk is not newer, skip reload
+		if diskLastUpdate < cacheLastUpdate {
+			r.logger.Println("disk version is not newer than cache: diskLastUpdate =", diskLastUpdate, ", cacheLastUpdate =", cacheLastUpdate)
+			return
+		}
+
+		if cacheStore.IsDirty() {
+			r.logger.Println("Warning: disk data is newer but cache is dirty; skipping reload")
+			// the cache content will be written to file soon anyway
+			return
+		}
+
+		isDiskSameAsCache := false
+		if diskLastUpdate == cacheLastUpdate {
+			// check if disk content is really the same as cache content
+			snapshot, err := cacheStore.Snapshot()
+			if err != nil {
+				r.logger.Printf("cache reload error: failed to get snapshot: %v", err)
+				return
+			}
+			isDiskSameAsCache = AreDataDocumentsEqual(&snapshot, diskDoc)
+		}
+		if !isDiskSameAsCache {
+			if err := cacheStore.Replace(*diskDoc); err != nil {
+				r.logger.Printf("cache reload error: %v", err)
+				return
+			}
+			r.logger.Println("cache reloaded from newer disk version")
+		}
+	}
 }

@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"github.com/bassista/go_spin/internal/repository"
@@ -15,8 +16,8 @@ func StartPersistenceScheduler(
 	store *Store,
 	repo *repository.JSONRepository,
 	interval time.Duration,
-	logger *log.Logger,
 ) {
+	logger := log.New(os.Stdout, "[persist] ", log.LstdFlags)
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()

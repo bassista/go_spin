@@ -14,7 +14,8 @@ type ContainerController struct {
 	validator *validator.Validate
 }
 
-func NewContainerController(store *cache.Store, validator *validator.Validate) *ContainerController {
+func NewContainerController(store *cache.Store) *ContainerController {
+	validator := validator.New()
 	return &ContainerController{store: store, validator: validator}
 }
 

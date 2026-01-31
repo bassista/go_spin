@@ -16,8 +16,8 @@ type Store struct {
 }
 
 // NewStore creates an empty cache store.
-func NewStore() *Store {
-	return &Store{}
+func NewStore(doc repository.DataDocument) *Store {
+	return &Store{data: doc, lastUpdate: doc.Metadata.LastUpdate}
 }
 
 // MarkDirty sets the dirty flag to true.
