@@ -1,0 +1,244 @@
+package controller
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/bassista/go_spin/internal/cache"
+	"github.com/bassista/go_spin/internal/repository"
+	"github.com/gin-gonic/gin"
+)
+
+// mockGroupStore implements cache.GroupStore for testing
+type mockGroupStore struct {
+	doc       repository.DataDocument
+	addErr    error
+	removeErr error
+}
+
+func (m *mockGroupStore) Snapshot() (repository.DataDocument, error) {
+	return m.doc, nil
+}
+
+func (m *mockGroupStore) AddGroup(g repository.Group) (repository.DataDocument, error) {
+	if m.addErr != nil {
+		return repository.DataDocument{}, m.addErr
+	}
+	m.doc.Groups = append(m.doc.Groups, g)
+	return m.doc, nil
+}
+
+func (m *mockGroupStore) RemoveGroup(name string) (repository.DataDocument, error) {
+	if m.removeErr != nil {
+		return repository.DataDocument{}, m.removeErr
+	}
+	for i, g := range m.doc.Groups {
+		if g.Name == name {
+			m.doc.Groups = append(m.doc.Groups[:i], m.doc.Groups[i+1:]...)
+			return m.doc, nil
+		}
+	}
+	return repository.DataDocument{}, cache.ErrGroupNotFound
+}
+
+func TestGroupController_AllGroups(t *testing.T) {
+	active := true
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{
+				{Name: "group1", Container: []string{"c1", "c2"}, Active: &active},
+				{Name: "group2", Container: []string{"c3"}, Active: &active},
+			},
+		},
+	}
+
+	gc := NewGroupController(store)
+
+	r := gin.New()
+	r.GET("/groups", gc.AllGroups)
+
+	req := httptest.NewRequest(http.MethodGet, "/groups", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	var groups []repository.Group
+	if err := json.Unmarshal(w.Body.Bytes(), &groups); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if len(groups) != 2 {
+		t.Errorf("expected 2 groups, got %d", len(groups))
+	}
+}
+
+func TestGroupController_CreateOrUpdateGroup_Valid(t *testing.T) {
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{},
+		},
+	}
+
+	gc := NewGroupController(store)
+
+	r := gin.New()
+	r.POST("/group", gc.CreateOrUpdateGroup)
+
+	active := true
+	group := repository.Group{
+		Name:      "new-group",
+		Container: []string{"c1", "c2"},
+		Active:    &active,
+	}
+	body, _ := json.Marshal(group)
+
+	req := httptest.NewRequest(http.MethodPost, "/group", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGroupController_CreateOrUpdateGroup_InvalidPayload(t *testing.T) {
+	store := &mockGroupStore{}
+	gc := NewGroupController(store)
+
+	r := gin.New()
+	r.POST("/group", gc.CreateOrUpdateGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group", bytes.NewReader([]byte("invalid")))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", w.Code)
+	}
+}
+
+func TestGroupController_CreateOrUpdateGroup_ValidationError(t *testing.T) {
+	store := &mockGroupStore{}
+	gc := NewGroupController(store)
+
+	r := gin.New()
+	r.POST("/group", gc.CreateOrUpdateGroup)
+
+	// Missing required fields (name, active)
+	group := map[string]any{
+		"container": []string{"c1"},
+	}
+	body, _ := json.Marshal(group)
+
+	req := httptest.NewRequest(http.MethodPost, "/group", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", w.Code)
+	}
+}
+
+func TestGroupController_CreateOrUpdateGroup_StoreError(t *testing.T) {
+	store := &mockGroupStore{
+		addErr: errors.New("store error"),
+	}
+	gc := NewGroupController(store)
+
+	r := gin.New()
+	r.POST("/group", gc.CreateOrUpdateGroup)
+
+	active := true
+	group := repository.Group{
+		Name:      "test",
+		Container: []string{"c1"},
+		Active:    &active,
+	}
+	body, _ := json.Marshal(group)
+
+	req := httptest.NewRequest(http.MethodPost, "/group", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", w.Code)
+	}
+}
+
+func TestGroupController_DeleteGroup_Success(t *testing.T) {
+	active := true
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{
+				{Name: "to-delete", Container: []string{}, Active: &active},
+			},
+		},
+	}
+	gc := NewGroupController(store)
+
+	r := gin.New()
+	r.DELETE("/group/:name", gc.DeleteGroup)
+
+	req := httptest.NewRequest(http.MethodDelete, "/group/to-delete", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+}
+
+func TestGroupController_DeleteGroup_NotFound(t *testing.T) {
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{},
+		},
+	}
+	gc := NewGroupController(store)
+
+	r := gin.New()
+	r.DELETE("/group/:name", gc.DeleteGroup)
+
+	req := httptest.NewRequest(http.MethodDelete, "/group/nonexistent", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestGroupController_DeleteGroup_MissingName(t *testing.T) {
+	store := &mockGroupStore{}
+	gc := NewGroupController(store)
+
+	r := gin.New()
+	r.DELETE("/group/", gc.DeleteGroup)
+
+	req := httptest.NewRequest(http.MethodDelete, "/group/", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", w.Code)
+	}
+}
