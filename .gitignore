@@ -27,7 +27,7 @@ go.work
 go.work.sum
 
 # mod cache
-go.sum
+#go.sum
 
 # Editor/IDE
 # .idea/

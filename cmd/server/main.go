@@ -65,23 +65,16 @@ func main() {
 }
 
 func createServer(r *gin.Engine, app *appctx.App) *httpgrace.Server {
-	// Set graceful shutdown timeout (default: 10 seconds)
-	httpgrace.WithTimeout(app.Config.Server.ShutDownTimeout)
-	// Customize shutdown signals (default: SIGINT, SIGTERM)
-	httpgrace.WithSignals(syscall.SIGTERM, syscall.SIGINT)
-	// Provide custom logger (default: slog.Default())
-	//httpgrace.WithLogger(customLogger)
-	// Provide a function to run before shutdown
-	httpgrace.WithBeforeShutdown(func() {
-		fmt.Println("Shoutting down!")
-	})
 	srv := httpgrace.NewServer(r,
+		httpgrace.WithTimeout(app.Config.Server.ShutDownTimeout),
+		httpgrace.WithSignals(syscall.SIGTERM, syscall.SIGINT),
+		httpgrace.WithBeforeShutdown(func() {
+			fmt.Println("Shutting down....")
+		}),
 		httpgrace.WithServerOptions(
 			httpgrace.WithReadTimeout(app.Config.Server.ReadTimeout),
 			httpgrace.WithWriteTimeout(app.Config.Server.WriteTimeout),
 			httpgrace.WithIdleTimeout(app.Config.Server.IdleTimeout),
-			// Set BaseContext so all request contexts derive from app's base context.
-			// This ensures that when app shuts down, all in-flight requests get cancelled.
 			func(srv *http.Server) {
 				srv.BaseContext = func(_ net.Listener) context.Context {
 					return app.BaseCtx
