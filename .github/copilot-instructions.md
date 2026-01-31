@@ -1,7 +1,7 @@
 # Copilot Instructions for go_spin
 
 ## Overview
-**go_spin** è un'applicazione Go per la gestione schedulata di container Docker. Permette di definire container, gruppi e schedule con timer per avviare/fermare automaticamente i container in base a orari e giorni configurati.
+**go_spin** è un'applicazione Go per la gestione schedulata di container Docker. Permette di definire container, gruppi e schedule con timer per avviare/fermare automaticamente i container in base a orari e giorni configurati. Include una UI web SPA per la gestione visuale.
 
 ## Architettura
 
@@ -9,14 +9,23 @@
 ```
 internal/
 ├── api/              # Layer HTTP (Gin)
-│   ├── controller/   # Handler per containers, groups, schedules
-│   └── route/        # Setup delle route per ogni risorsa
+│   ├── controller/   # Handler per containers, groups, schedules, runtime
+│   ├── middleware/   # CORS middleware
+│   └── route/        # Setup delle route per ogni risorsa + UI
 ├── app/              # Application container (dependency injection)
 ├── cache/            # In-memory store con dirty-tracking
 ├── config/           # Configurazione via Viper + dotenv
 ├── repository/       # Persistenza JSON con file-watching (fsnotify)
-├── runtime/          # Interfaccia ContainerRuntime (Docker/Memory)
+├── runtime/          # Interfaccia ContainerRuntime (Docker/Memory) + factory
 └── scheduler/        # PollingScheduler per automazione start/stop
+```
+
+### Struttura UI (`ui/`)
+```
+ui/
+├── index.html        # SPA Alpine.js + TailwindCSS
+└── assets/
+    └── app.js        # Logica Alpine.js per CRUD containers/groups/schedules
 ```
 
 ### Flusso dati principale
@@ -56,12 +65,19 @@ misc:
   scheduling_enabled: true
   scheduling_poll_interval_secs: 30
   scheduling_timezone: "Local"
+  runtime_type: "docker"           # "docker" o "memory"
+  cors_allowed_origins: "*"        # CORS origins (default "*")
 ```
 
 ### Environment variables (prefix: `GO_SPIN_`)
 - `GO_SPIN_CONFIG_PATH`: percorso cartella config (default: `./config`)
 - `GO_SPIN_MISC.GIN_MODE`: `debug` o `release`
+- `GO_SPIN_MISC.RUNTIME_TYPE`: `docker` o `memory`
+- `GO_SPIN_MISC.CORS_ALLOWED_ORIGINS`: origini CORS permesse
 - Supporto `.env` via `godotenv`
+
+### Auto-creazione directory
+Se la directory del file dati (`data.file_path`) non esiste, viene creata automaticamente all'avvio.
 
 ## Developer Workflows
 
@@ -105,6 +121,39 @@ cli, err := client.New(client.FromEnv)  // Auto API version negotiation
 ### `MemoryRuntime`
 Runtime mock per testing senza Docker socket.
 
+### Runtime Factory (`internal/runtime/factory.go`)
+```go
+rt, err := runtime.NewRuntimeFromConfig(runtimeType, doc)
+// runtimeType: "docker" (default) o "memory"
+```
+
+## Web UI (Alpine.js SPA)
+
+Accessibile su `/ui` - gestione visuale di containers, groups e schedules.
+
+### Funzionalità
+| Tab | Operazioni |
+|-----|------------|
+| **Containers** | Lista, Aggiungi, Modifica, Elimina, Start/Stop runtime |
+| **Groups** | Lista, Aggiungi, Modifica, Elimina, selezione multi-container |
+| **Schedules** | Lista, Aggiungi, Modifica, Elimina + editor completo timers |
+
+### Stack frontend
+- **Alpine.js**: Reattività e stato
+- **TailwindCSS**: Styling (via CDN)
+- **htmx**: Incluso ma non usato (API JSON-based)
+
+### File
+- `ui/index.html`: Layout HTML con componenti Alpine
+- `ui/assets/app.js`: Logica applicativa (fetch API, form handling)
+
+## CORS
+
+Middleware CORS configurabile in `internal/api/middleware/cors.go`:
+- Default: `*` (tutte le origini)
+- Configurabile via `misc.cors_allowed_origins`
+- Supporta preflight OPTIONS
+
 ## API REST (Gin)
 
 | Method | Endpoint | Descrizione |
@@ -122,6 +171,8 @@ Runtime mock per testing senza Docker socket.
 | GET | `/runtime/:name/status` | Verifica se container è running |
 | POST | `/runtime/:name/start` | Avvia container |
 | POST | `/runtime/:name/stop` | Ferma container |
+| GET | `/ui` | Web UI (SPA Alpine.js) |
+| GET | `/ui/assets/*` | Asset statici UI |
 
 ## Convenzioni codice
 
