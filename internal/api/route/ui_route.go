@@ -2,6 +2,7 @@ package route
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,8 +20,10 @@ func NewUIRouter(r *gin.Engine) {
 
 	// Serve index.html for any sub-path under /ui (SPA client-side routing)
 	r.NoRoute(func(c *gin.Context) {
+		p := c.Request.URL.Path
+
 		// Only handle /ui/* paths, return 404 for others
-		if len(c.Request.URL.Path) >= 3 && c.Request.URL.Path[:3] == "/ui" {
+		if p == "/ui" || strings.HasPrefix(p, "/ui/") {
 			c.File("./ui/index.html")
 			return
 		}

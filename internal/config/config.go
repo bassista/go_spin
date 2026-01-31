@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -74,6 +75,7 @@ func LoadConfig() (*Config, error) {
 	// Environment variables automatically override config file values
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix(ENV_PREFIX)
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
@@ -84,7 +86,7 @@ func LoadConfig() (*Config, error) {
 	}
 
 	fileStorePath := viper.GetString("data.file_path")
-	log.Printf("Using configuration file: %s", fileStorePath)
+	log.Printf("Using data file: %s", fileStorePath)
 
 	// Ensure the directory for the data file exists
 	dataDir := filepath.Dir(fileStorePath)

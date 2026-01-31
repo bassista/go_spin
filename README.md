@@ -78,13 +78,13 @@ All settings can be overridden via environment variables with prefix `GO_SPIN_`:
 PORT=8084
 
 # Gin mode
-GO_SPIN_MISC.GIN_MODE=debug
+GO_SPIN_MISC_GIN_MODE=debug
 
 # Runtime type (docker or memory for testing)
-GO_SPIN_MISC.RUNTIME_TYPE=docker
+GO_SPIN_MISC_RUNTIME_TYPE=docker
 
 # CORS allowed origins
-GO_SPIN_MISC.CORS_ALLOWED_ORIGINS=*
+GO_SPIN_MISC_CORS_ALLOWED_ORIGINS=*
 
 # Config path
 GO_SPIN_CONFIG_PATH=./config
@@ -97,8 +97,8 @@ Create a `.env` file in the project root:
 
 ```env
 PORT=8084
-GO_SPIN_MISC.GIN_MODE=debug
-GO_SPIN_MISC.RUNTIME_TYPE=memory
+GO_SPIN_MISC_GIN_MODE=debug
+GO_SPIN_MISC_RUNTIME_TYPE=memory
 ```
 
 ## 📡 API Endpoints

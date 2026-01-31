@@ -4,11 +4,13 @@ import (
 	"time"
 
 	"github.com/bassista/go_spin/internal/api/controller"
+	"github.com/bassista/go_spin/internal/api/middleware"
 	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/gin-gonic/gin"
 )
 
 func NewRuntimeRouter(timeout time.Duration, group *gin.RouterGroup, rt runtime.ContainerRuntime) {
+	group.Use(middleware.RequestTimeout(timeout))
 
 	rc := controller.NewRuntimeController(rt)
 

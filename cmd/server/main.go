@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"syscall"
@@ -55,7 +58,7 @@ func main() {
 	srv := createServer(r, app)
 
 	fmt.Printf("App will run on port: %d\n", cfg.Server.Port)
-	if err := srv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil {
+	if err := srv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
 
@@ -77,7 +80,13 @@ func createServer(r *gin.Engine, app *appctx.App) *httpgrace.Server {
 			httpgrace.WithReadTimeout(app.Config.Server.ReadTimeout),
 			httpgrace.WithWriteTimeout(app.Config.Server.WriteTimeout),
 			httpgrace.WithIdleTimeout(app.Config.Server.IdleTimeout),
-			// or with your custom ServerOption
+			// Set BaseContext so all request contexts derive from app's base context.
+			// This ensures that when app shuts down, all in-flight requests get cancelled.
+			func(srv *http.Server) {
+				srv.BaseContext = func(_ net.Listener) context.Context {
+					return app.BaseCtx
+				}
+			},
 			func(srv *http.Server) {
 				srv.ErrorLog = log.New(os.Stdout, "", 0)
 			},
