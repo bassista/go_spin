@@ -43,65 +43,46 @@ jobs:
         run: |
           pct=${{ steps.cov.outputs.percentage }}
           color="red"
-
           if (( $(echo "$pct > 90" | bc -l) )); then color="brightgreen"; fi
           if (( $(echo "$pct > 75" | bc -l) )); then color="green"; fi
           if (( $(echo "$pct > 60" | bc -l) )); then color="yellow"; fi
-
           echo "<img src=\"https://img.shields.io/badge/Coverage-$pct%25-$color\"/>" > public/badge.html
 
       - name: Copy coverage text file
         run: cp coverage/coverage.txt public/
 
-      - name: Generate index.html
+      - name: Generate index.html (safe mode)
         run: |
-          pct=${{ steps.cov.outputs.percentage }}
           badge=$(cat public/badge.html)
 
-          cat << 'EOF' > public/index.html
-<!DOCTYPE html>
-<html lang="it">
-<head>
-<meta charset="UTF-8">
-<title>Go Coverage Report</title>
-<style>
-body { font-family: Arial; background: #f4f6f8; margin:0 }
-header { background:#24292f; color:#fff; padding:20px; text-align:center }
-.container { max-width:900px; margin:30px auto; background:#fff; padding:25px;
-border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1) }
-pre { background:#f3f3f3; padding:15px; border:1px solid #ddd; border-radius:6px }
-.center { text-align:center }
-</style>
-</head>
-<body>
-<header><h1>Go Coverage Report</h1></header>
-<div class="container">
+          echo "<!DOCTYPE html>" > public/index.html
+          echo "<html lang=\"it\">" >> public/index.html
+          echo "<head>" >> public/index.html
+          echo "<meta charset=\"UTF-8\">" >> public/index.html
+          echo "<title>Go Coverage Report</title>" >> public/index.html
+          echo "<style>" >> public/index.html
+          echo "body { font-family: Arial; background: #f4f6f8; margin:0 }" >> public/index.html
+          echo "header { background:#24292f; color:#fff; padding:20px; text-align:center }" >> public/index.html
+          echo ".container { max-width:900px; margin:30px auto; background:#fff; padding:25px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1) }" >> public/index.html
+          echo "pre { background:#f3f3f3; padding:15px; border:1px solid #ddd; border-radius:6px }" >> public/index.html
+          echo ".center { text-align:center }" >> public/index.html
+          echo "</style>" >> public/index.html
+          echo "</head>" >> public/index.html
+          echo "<body>" >> public/index.html
+          echo "<header><h1>Go Coverage Report</h1></header>" >> public/index.html
+          echo "<div class=\"container\">" >> public/index.html
 
-<h2>📊 Coverage Badge</h2>
-<div class="center">
-<!-- BADGE -->
-EOF
+          echo "<h2>📊 Coverage Badge</h2>" >> public/index.html
+          echo "<div class=\"center\">$badge</div>" >> public/index.html
 
-          # append badge
-          echo "$badge" >> public/index.html
-
-          cat << 'EOF' >> public/index.html
-</div>
-
-<h2>📑 Coverage Table</h2>
-<pre>
-EOF
-
-          # append coverage file
+          echo "<h2>📑 Coverage Table</h2>" >> public/index.html
+          echo "<pre>" >> public/index.html
           cat public/coverage.txt >> public/index.html
+          echo "</pre>" >> public/index.html
 
-          cat << 'EOF' >> public/index.html
-</pre>
-
-</div>
-</body>
-</html>
-EOF
+          echo "</div>" >> public/index.html
+          echo "</body>" >> public/index.html
+          echo "</html>" >> public/index.html
 
       - name: Upload artifact for Pages
         uses: actions/upload-pages-artifact@v3
