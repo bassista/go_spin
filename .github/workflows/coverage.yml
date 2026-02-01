@@ -43,6 +43,7 @@ jobs:
         run: |
           pct=${{ steps.cov.outputs.percentage }}
           color="red"
+
           if (( $(echo "$pct > 90" | bc -l) )); then color="brightgreen"; fi
           if (( $(echo "$pct > 75" | bc -l) )); then color="green"; fi
           if (( $(echo "$pct > 60" | bc -l) )); then color="yellow"; fi
@@ -57,7 +58,7 @@ jobs:
           pct=${{ steps.cov.outputs.percentage }}
           badge=$(cat public/badge.html)
 
-          cat > public/index.html <<EOF
+          cat << 'EOF' > public/index.html
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -75,12 +76,26 @@ pre { background:#f3f3f3; padding:15px; border:1px solid #ddd; border-radius:6px
 <body>
 <header><h1>Go Coverage Report</h1></header>
 <div class="container">
+
 <h2>📊 Coverage Badge</h2>
-<div class="center">$badge</div>
+<div class="center">
+<!-- BADGE -->
+EOF
+
+          # append badge
+          echo "$badge" >> public/index.html
+
+          cat << 'EOF' >> public/index.html
+</div>
 
 <h2>📑 Coverage Table</h2>
 <pre>
-$(cat public/coverage.txt)
+EOF
+
+          # append coverage file
+          cat public/coverage.txt >> public/index.html
+
+          cat << 'EOF' >> public/index.html
 </pre>
 
 </div>
