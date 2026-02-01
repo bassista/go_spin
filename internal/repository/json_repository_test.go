@@ -42,6 +42,72 @@ func TestNewJSONRepository_Success(t *testing.T) {
 	}
 }
 
+func TestJSONRepository_RemoveSchedulesWithMissingTargets_Load(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := DataDocument{
+		Metadata:   Metadata{LastUpdate: 1000},
+		Containers: []Container{},
+		Groups:     []Group{},
+		Schedules: []Schedule{
+			{ID: "s1", Target: "container_missing", TargetType: "container", Timers: []Timer{}},
+			{ID: "s2", Target: "group_missing", TargetType: "group", Timers: []Timer{}},
+		},
+	}
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	loaded, err := repo.Load(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected load error: %v", err)
+	}
+
+	if len(loaded.Schedules) != 0 {
+		t.Errorf("expected 0 schedules after removing missing targets, got %d", len(loaded.Schedules))
+	}
+}
+
+func TestJSONRepository_RemoveSchedulesWithMissingTargets_Preserve(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := DataDocument{
+		Metadata:   Metadata{LastUpdate: 1000},
+		Containers: []Container{{Name: "c1", FriendlyName: "C1", URL: "http://c1", Active: boolPtrJSON(true)}},
+		Groups:     []Group{{Name: "g1", Container: []string{"c1"}, Active: boolPtrJSON(true)}},
+		Schedules: []Schedule{
+			{ID: "s1", Target: "c1", TargetType: "container", Timers: []Timer{}},
+			{ID: "s2", Target: "g1", TargetType: "group", Timers: []Timer{}},
+		},
+	}
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	loaded, err := repo.Load(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected load error: %v", err)
+	}
+
+	if len(loaded.Schedules) != 2 {
+		t.Errorf("expected 2 schedules preserved, got %d", len(loaded.Schedules))
+	}
+}
+
 func TestNewJSONRepository_EmptyPath(t *testing.T) {
 	_, err := NewJSONRepository("")
 	if err == nil {
@@ -867,7 +933,7 @@ func TestJSONRepository_StartWatcher_RemoveEvent(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Remove the file
-	os.Remove(configPath)
+	_ = os.Remove(configPath)
 
 	// Wait a bit
 	time.Sleep(100 * time.Millisecond)

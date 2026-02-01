@@ -84,23 +84,60 @@ func (r *JSONRepository) loadUnlocked() (*DataDocument, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open data file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
-	decoder := json.NewDecoder(file)
 	var doc DataDocument
-	if err := decoder.Decode(&doc); err != nil {
+	if err := json.NewDecoder(file).Decode(&doc); err != nil {
 		return nil, fmt.Errorf("decode data file: %w", err)
 	}
 
 	doc.ApplyDefaults()
 
+	finalDoc := removeSchedulesWithMissingContainers(&doc)
+
 	if r.validator != nil {
-		if err := r.validator.Struct(&doc); err != nil {
+		if err := r.validator.Struct(finalDoc); err != nil {
 			return nil, fmt.Errorf("validate data file: %w", err)
 		}
 	}
 
-	return &doc, nil
+	return finalDoc, nil
+}
+
+func removeSchedulesWithMissingContainers(doc *DataDocument) *DataDocument {
+	if doc == nil {
+		return doc
+	}
+
+	// Build lookup sets for existing containers and groups
+	containerSet := make(map[string]struct{}, len(doc.Containers))
+	for _, c := range doc.Containers {
+		containerSet[c.Name] = struct{}{}
+	}
+	groupSet := make(map[string]struct{}, len(doc.Groups))
+	for _, g := range doc.Groups {
+		groupSet[g.Name] = struct{}{}
+	}
+
+	filtered := make([]Schedule, 0, len(doc.Schedules))
+	for _, s := range doc.Schedules {
+		if s.TargetType == "container" {
+			if _, ok := containerSet[s.Target]; !ok {
+				logger.WithComponent("json-repo").Warnf("removing schedule %s: target container %s not found", s.ID, s.Target)
+				continue
+			}
+		}
+		if s.TargetType == "group" {
+			if _, ok := groupSet[s.Target]; !ok {
+				logger.WithComponent("json-repo").Warnf("removing schedule %s: target group %s not found", s.ID, s.Target)
+				continue
+			}
+		}
+		filtered = append(filtered, s)
+	}
+
+	doc.Schedules = filtered
+	return doc
 }
 
 // Save validates and writes the document atomically to disk.
@@ -160,8 +197,8 @@ func (r *JSONRepository) saveUnlocked(doc *DataDocument) error {
 		return fmt.Errorf("create temp file: %w", err)
 	}
 	defer func() {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
 	}()
 
 	if _, err := tmpFile.Write(payload); err != nil {
@@ -202,7 +239,7 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore
 	}
 
 	if err := watcher.Add(r.dir); err != nil {
-		watcher.Close()
+		_ = watcher.Close()
 		logger.WithComponent("json-repo").Debugf("failed to watch directory: %v", err)
 		return fmt.Errorf("watch dir: %w", err)
 	}
@@ -211,7 +248,7 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore
 
 	// Run watcher loop in the background; it exits when ctx is canceled or channels close.
 	go func() {
-		defer watcher.Close()
+		defer func() { _ = watcher.Close() }()
 
 		// debounce coalesces bursty fsnotify events (write+chmod/rename) into a single reload.
 		// If the timer is stopped before it fires, the scheduled onChange will not run.

@@ -20,13 +20,13 @@ func TestConfig_Validate_Valid(t *testing.T) {
 			PersistInterval: 5 * time.Second,
 		},
 		Misc: MiscConfig{
-			GinMode:              "release",
-			SchedulingEnabled:    true,
-			SchedulingPoll:       30 * time.Second,
-			RequestTimeoutMillis: 1000 * time.Millisecond,
-			SchedulingTZ:         "Local",
-			RuntimeType:          "docker",
-			CORSAllowedOrigins:   "*",
+			GinMode:            "release",
+			SchedulingEnabled:  true,
+			SchedulingPoll:     30 * time.Second,
+			RequestTimeout:     1000 * time.Millisecond,
+			SchedulingTZ:       "Local",
+			RuntimeType:        "docker",
+			CORSAllowedOrigins: "*",
 		},
 	}
 
@@ -233,9 +233,9 @@ func TestConfig_Validate_ValidTimezones(t *testing.T) {
 					PersistInterval: 5 * time.Second,
 				},
 				Misc: MiscConfig{
-					SchedulingPoll:       30 * time.Second,
-					RequestTimeoutMillis: 1000 * time.Millisecond,
-					SchedulingTZ:         tz,
+					SchedulingPoll: 30 * time.Second,
+					RequestTimeout: 1000 * time.Millisecond,
+					SchedulingTZ:   tz,
 				},
 			}
 
@@ -248,8 +248,8 @@ func TestConfig_Validate_ValidTimezones(t *testing.T) {
 
 func TestGetEnvOrDefault(t *testing.T) {
 	// Test with env var set
-	os.Setenv("TEST_ENV_VAR", "custom_value")
-	defer os.Unsetenv("TEST_ENV_VAR")
+	_ = os.Setenv("TEST_ENV_VAR", "custom_value")
+	defer func() { _ = os.Unsetenv("TEST_ENV_VAR") }()
 
 	result := getEnvOrDefault("TEST_ENV_VAR", "default_value")
 	if result != "custom_value" {
@@ -264,8 +264,8 @@ func TestGetEnvOrDefault(t *testing.T) {
 }
 
 func TestGetEnvOrViperPort_FromEnv(t *testing.T) {
-	os.Setenv("TEST_PORT", "9090")
-	defer os.Unsetenv("TEST_PORT")
+	_ = os.Setenv("TEST_PORT", "9090")
+	defer func() { _ = os.Unsetenv("TEST_PORT") }()
 
 	port, err := getEnvOrViperPort("TEST_PORT", "server.port")
 	if err != nil {
@@ -277,8 +277,8 @@ func TestGetEnvOrViperPort_FromEnv(t *testing.T) {
 }
 
 func TestGetEnvOrViperPort_InvalidEnv(t *testing.T) {
-	os.Setenv("TEST_PORT_INVALID", "not_a_number")
-	defer os.Unsetenv("TEST_PORT_INVALID")
+	_ = os.Setenv("TEST_PORT_INVALID", "not_a_number")
+	defer func() { _ = os.Unsetenv("TEST_PORT_INVALID") }()
 
 	_, err := getEnvOrViperPort("TEST_PORT_INVALID", "server.port")
 	if err == nil {

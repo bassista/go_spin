@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Spinnerr</title>
+<style>
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: #f0f0f0;
+    font-family: sans-serif;
+    flex-direction: column;
+    text-align: center;
+  }
+
+  h1 {
+    margin-bottom: 16px;
+    color: #404040;
+  }
+
+  p {
+    margin-bottom: 32px;
+    color: #666;
+  }
+
+  .loader {
+    width: 48px;
+    height: 48px;
+    border: 3px solid #ccc;
+    border-radius: 50%;
+    position: relative;
+    box-sizing: border-box;
+    animation: rotation 1s linear infinite;
+  }
+
+  .loader::after {
+    content: '';  
+    box-sizing: border-box;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    background: #34bfa3;
+    width: 18px;
+    height: 18px;
+    transform: translate(-50%, -50%) translateY(-20px);
+    border-radius: 50%;
+  }
+
+  @keyframes rotation {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .error {
+    color: #d32f2f;
+    font-weight: bold;
+    margin-top: 16px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    body {
+      background: #111;
+      color: #eee;
+    }
+    p {
+      color: #bbb;
+    }
+  }
+</style>
+
+<script>
+  const REDIRECT_URL = '{{REDIRECT_URL}}';
+  const CONTAINER_NAME = '{{CONTAINER_NAME}}';
+  const MAX_WAIT_TIME = 5 * 60 * 1000; // 5 minutes
+  const CHECK_INTERVAL = 3000; // Check every 4 seconds
+  
+  const startTime = Date.now();
+  const errorElement = document.createElement('div');
+  errorElement.className = 'error';
+  
+  setInterval(async () => {
+    const elapsed = Date.now() - startTime;
+    
+    // Check if max wait time exceeded
+    if (elapsed > MAX_WAIT_TIME) {
+      errorElement.textContent = `Container failed to start after ${MAX_WAIT_TIME / 1000} seconds. Please try again.`;
+      document.body.appendChild(errorElement);
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/container/${CONTAINER_NAME}/ready`);
+      const data = await res.json();
+      
+      if (data.ready) {
+        console.log('Container is ready, redirecting to ' + REDIRECT_URL);
+        window.location.href = REDIRECT_URL;
+      } else {
+        const minutes = Math.floor(elapsed / 60000);
+        const seconds = Math.floor((elapsed % 60000) / 1000);
+        console.log(`Container not ready yet (${minutes}m ${seconds}s)...`);
+      }
+    } catch(e) {  
+      console.log(`Check error: ${e.message}`);
+    }
+  }, CHECK_INTERVAL);
+</script>
+</head>
+<body>
+  <div class="loader"></div>
+</body>
+</html>

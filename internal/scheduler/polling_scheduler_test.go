@@ -618,11 +618,14 @@ func TestPollingScheduler_ConcurrentGetSetFlags(t *testing.T) {
 	// Concurrent reads and writes to flags
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(2)
-		containerName := "c1"
-		if i%3 == 1 {
+		var containerName string
+		switch i % 3 {
+		case 1:
 			containerName = "c2"
-		} else if i%3 == 2 {
+		case 2:
 			containerName = "c3"
+		default:
+			containerName = "c1"
 		}
 
 		// Concurrent getFlags

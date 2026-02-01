@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/bassista/go_spin/internal/cache"
 	"github.com/bassista/go_spin/internal/logger"
@@ -68,4 +70,91 @@ func (cc *ContainerController) DeleteContainer(c *gin.Context) {
 
 	logger.WithComponent("container-controller").Debugf("container %s deleted successfully", name)
 	c.JSON(http.StatusOK, items)
+}
+
+// Ready checks whether the container identified by name is reachable and responding 200.
+// Route: GET /container/:name/ready
+func (cc *ContainerController) Ready(c *gin.Context) {
+	name := c.Param("name")
+	logger.WithComponent("container-controller").Debugf("GET /container/%s/ready handler called", name)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ready": false})
+		return
+	}
+
+	// Assert underlying service type to access Store and Runtime
+	svc, ok := cc.crud.Service.(*ContainerCrudService)
+	if !ok {
+		logger.WithComponent("container-controller").Errorf("ready: unexpected service type")
+		c.JSON(http.StatusInternalServerError, gin.H{"ready": false})
+		return
+	}
+
+	// Find container in store snapshot
+	doc, err := svc.Store.Snapshot()
+	if err != nil {
+		logger.WithComponent("container-controller").Errorf("ready: failed to snapshot store: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"ready": false})
+		return
+	}
+
+	var container *repository.Container
+	for i := range doc.Containers {
+		if doc.Containers[i].Name == name {
+			container = &doc.Containers[i]
+			break
+		}
+	}
+	if container == nil {
+		c.JSON(http.StatusNotFound, gin.H{"ready": false})
+		return
+	}
+
+	// Check runtime
+	running, err := svc.Runtime.IsRunning(svc.Ctx, container.Name)
+	if err != nil {
+		logger.WithComponent("container-controller").Warnf("ready: runtime check failed for %s: %v", container.Name, err)
+		c.JSON(http.StatusOK, gin.H{"ready": false})
+		return
+	}
+	if !running {
+		c.JSON(http.StatusOK, gin.H{"ready": false})
+		return
+	}
+
+	if container.URL == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"ready": false})
+		return
+	}
+
+	containerURL := container.URL
+	if !strings.HasPrefix(containerURL, "http://") && !strings.HasPrefix(containerURL, "https://") {
+		containerURL = "https://" + containerURL
+	}
+	if !strings.HasSuffix(containerURL, "/") {
+		containerURL = containerURL + "/"
+	}
+
+	// Perform GET with timeout
+	reqCtx, cancel := context.WithTimeout(c.Request.Context(), 1*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, containerURL, nil)
+	if err != nil {
+		logger.WithComponent("container-controller").Warnf("ready: failed to create request for %s: %v", container.Name, err)
+		c.JSON(http.StatusOK, gin.H{"ready": false})
+		return
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.WithComponent("container-controller").Warnf("ready: request failed for %s: %v", container.Name, err)
+		c.JSON(http.StatusOK, gin.H{"ready": false})
+		return
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	c.JSON(http.StatusOK, gin.H{"ready": resp.StatusCode == http.StatusOK})
 }

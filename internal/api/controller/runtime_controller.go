@@ -1,23 +1,44 @@
 package controller
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/bassista/go_spin/internal/cache"
+	"github.com/bassista/go_spin/internal/logger"
+	"github.com/bassista/go_spin/internal/repository"
 	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/gin-gonic/gin"
 )
 
+// DefaultWaitingTemplatePath is the default path for the waiting page template.
+const DefaultWaitingTemplatePath = "./ui/templates/waiting.html"
+
 type RuntimeController struct {
-	runtime        runtime.ContainerRuntime
-	containerStore cache.ContainerStore
+	runtime         runtime.ContainerRuntime
+	containerStore  cache.ContainerStore
+	waitingTemplate string
+	baseCtx         context.Context
 }
 
-func NewRuntimeController(rt runtime.ContainerRuntime, store cache.ContainerStore) *RuntimeController {
+// NewRuntimeController creates a new RuntimeController with the waiting template loaded from file.
+func NewRuntimeController(baseCtx context.Context, rt runtime.ContainerRuntime, store cache.ContainerStore) *RuntimeController {
+	templateContent, err := os.ReadFile(DefaultWaitingTemplatePath)
+	if err != nil {
+		logger.WithComponent("runtime_controller").Warnf("failed to load waiting template from %s: %v", DefaultWaitingTemplatePath, err)
+		templateContent = []byte("<!-- template not found -->")
+	} else {
+		logger.WithComponent("runtime_controller").Infof("loaded waiting template from %s", DefaultWaitingTemplatePath)
+	}
+
 	return &RuntimeController{
-		runtime:        rt,
-		containerStore: store,
+		runtime:         rt,
+		containerStore:  store,
+		waitingTemplate: string(templateContent),
+		baseCtx:         baseCtx,
 	}
 }
 
@@ -149,4 +170,162 @@ func (rc *RuntimeController) StopContainer(c *gin.Context) {
 		"name":    name,
 		"message": "container stopped",
 	})
+}
+
+// WaitingPage serves a waiting HTML page for a container or group.
+// It starts containers in background if they are not running.
+// Returns 404 if container/group not found, 403 if not active.
+func (rc *RuntimeController) WaitingPage(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing container or group name"})
+		return
+	}
+
+	doc, err := rc.containerStore.Snapshot()
+	if err != nil {
+		logger.WithComponent("runtime_controller").Errorf("failed to read container list: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read container list"})
+		return
+	}
+
+	// Try to find as container first
+	container, found := rc.findContainer(doc, name)
+	if found {
+		rc.handleContainerWaitingPage(c, container)
+		return
+	}
+
+	// Try to find as group
+	group, found := rc.findGroup(doc, name)
+	if found {
+		rc.handleGroupWaitingPage(c, doc, group)
+		return
+	}
+
+	// Not found as container or group
+	c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("container or group '%s' not found", name)})
+}
+
+// findContainer searches for a container by name in the data document.
+func (rc *RuntimeController) findContainer(doc repository.DataDocument, name string) (*repository.Container, bool) {
+	for i := range doc.Containers {
+		if doc.Containers[i].Name == name {
+			return &doc.Containers[i], true
+		}
+	}
+	return nil, false
+}
+
+// findGroup searches for a group by name in the data document.
+func (rc *RuntimeController) findGroup(doc repository.DataDocument, name string) (*repository.Group, bool) {
+	for i := range doc.Groups {
+		if doc.Groups[i].Name == name {
+			return &doc.Groups[i], true
+		}
+	}
+	return nil, false
+}
+
+// handleContainerWaitingPage handles the waiting page for a single container.
+func (rc *RuntimeController) handleContainerWaitingPage(c *gin.Context, container *repository.Container) {
+	// Check if container is active
+	if container.Active == nil || !*container.Active {
+		c.JSON(http.StatusForbidden, gin.H{"error": fmt.Sprintf("container '%s' is not active", container.Name)})
+		return
+	}
+
+	// Check if container is running, if not start it in background
+	running, err := rc.runtime.IsRunning(c.Request.Context(), container.Name)
+	if err != nil {
+		logger.WithComponent("runtime_controller").Warnf("failed to check if container %s is running: %v", container.Name, err)
+		// Assume not running and try to start
+		running = false
+	}
+
+	if !running {
+		rc.startContainerInBackground(container.Name)
+	}
+
+	// Serve the waiting page
+	rc.serveWaitingPage(c, container.Name, container.URL)
+}
+
+// handleGroupWaitingPage handles the waiting page for a group of containers.
+func (rc *RuntimeController) handleGroupWaitingPage(c *gin.Context, doc repository.DataDocument, group *repository.Group) {
+	// Check if group is active
+	if group.Active == nil || !*group.Active {
+		c.JSON(http.StatusForbidden, gin.H{"error": fmt.Sprintf("group '%s' is not active", group.Name)})
+		return
+	}
+
+	// Find the first container in the group to get the redirect URL
+	if len(group.Container) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("group '%s' has no containers", group.Name)})
+		return
+	}
+
+	var firstContainer *repository.Container
+	for _, containerName := range group.Container {
+		container, found := rc.findContainer(doc, containerName)
+		if found {
+			firstContainer = container
+			break
+		}
+	}
+
+	if firstContainer == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("no valid containers found in group '%s'", group.Name)})
+		return
+	}
+
+	// Start all containers in the group that are not running (in background)
+	for _, containerName := range group.Container {
+		container, found := rc.findContainer(doc, containerName)
+		if !found {
+			logger.WithComponent("runtime_controller").Warnf("container %s in group %s not found", containerName, group.Name)
+			continue
+		}
+
+		// Check if container is active before starting
+		if container.Active == nil || !*container.Active {
+			logger.WithComponent("runtime_controller").Debugf("container %s in group %s is not active, skipping", containerName, group.Name)
+			continue
+		}
+
+		running, err := rc.runtime.IsRunning(c.Request.Context(), containerName)
+		if err != nil {
+			logger.WithComponent("runtime_controller").Warnf("failed to check if container %s is running: %v", containerName, err)
+			running = false
+		}
+
+		if !running {
+			rc.startContainerInBackground(containerName)
+		}
+	}
+
+	// Serve the waiting page with the group name and first container's URL
+	rc.serveWaitingPage(c, group.Name, firstContainer.URL)
+}
+
+// startContainerInBackground starts a container in a dedicated goroutine.
+func (rc *RuntimeController) startContainerInBackground(containerName string) {
+	go func(name string) {
+		logger.WithComponent("runtime_controller").Infof("starting container %s in background", name)
+		if err := rc.runtime.Start(rc.baseCtx, name); err != nil {
+			logger.WithComponent("runtime_controller").Errorf("failed to start container %s in background: %v", name, err)
+		} else {
+			logger.WithComponent("runtime_controller").Infof("container %s started successfully", name)
+		}
+	}(containerName)
+}
+
+// serveWaitingPage renders the waiting HTML template with placeholders replaced.
+func (rc *RuntimeController) serveWaitingPage(c *gin.Context, containerName, redirectURL string) {
+	html := rc.waitingTemplate
+	html = strings.ReplaceAll(html, "{{CONTAINER_NAME}}", containerName)
+	html = strings.ReplaceAll(html, "{{REDIRECT_URL}}", redirectURL)
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, html)
 }

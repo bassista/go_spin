@@ -79,7 +79,7 @@ func TestMemoryRuntime_Stop(t *testing.T) {
 	ctx := context.Background()
 
 	// Start then stop
-	mr.Start(ctx, "container1")
+	_ = mr.Start(ctx, "container1")
 	err := mr.Stop(ctx, "container1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -19,4 +19,5 @@ func NewContainerRouter(ctx context.Context, timeout time.Duration, group *gin.R
 	group.GET("containers", cc.AllContainers)
 	group.POST("container", cc.CreateOrUpdateContainer)
 	group.DELETE("container/:name", cc.DeleteContainer)
+	group.GET("container/:name/ready", cc.Ready)
 }

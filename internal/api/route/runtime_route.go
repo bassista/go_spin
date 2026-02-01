@@ -1,6 +1,7 @@
 package route
 
 import (
+	"context"
 	"time"
 
 	"github.com/bassista/go_spin/internal/api/controller"
@@ -10,12 +11,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func NewRuntimeRouter(timeout time.Duration, group *gin.RouterGroup, rt runtime.ContainerRuntime, store cache.ContainerStore) {
+func NewRuntimeRouter(baseCtx context.Context, timeout time.Duration, group *gin.RouterGroup, rt runtime.ContainerRuntime, store cache.ContainerStore) {
 	group.Use(middleware.RequestTimeout(timeout))
 
-	rc := controller.NewRuntimeController(rt, store)
+	rc := controller.NewRuntimeController(baseCtx, rt, store)
 
 	group.GET("runtime/:name/status", rc.IsRunning)
 	group.POST("runtime/:name/start", rc.StartContainer)
 	group.POST("runtime/:name/stop", rc.StopContainer)
+	group.GET("runtime/:name/start", rc.WaitingPage)
 }

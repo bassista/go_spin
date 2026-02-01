@@ -150,11 +150,14 @@ func TestMemoryRuntime_ConcurrentOperations(t *testing.T) {
 	// Concurrent starts, stops, and status checks
 	for i := 0; i < numOperations; i++ {
 		wg.Add(3)
-		containerName := "c1"
-		if i%3 == 1 {
+		var containerName string
+		switch i % 3 {
+		case 1:
 			containerName = "c2"
-		} else if i%3 == 2 {
+		case 2:
 			containerName = "c3"
+		default:
+			containerName = "c1"
 		}
 
 		// Concurrent Start

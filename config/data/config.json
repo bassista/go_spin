@@ -4,7 +4,7 @@
   },
   "containers": [
     {
-      "name": "qbittorrent",
+      "name": "deluge",
       "friendly_name": "qb781",
       "url": "https://deluge.lan.asga.uk",
       "running": true,

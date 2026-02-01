@@ -36,14 +36,14 @@ type DataConfig struct {
 }
 
 type MiscConfig struct {
-	GinMode              string
-	SchedulingEnabled    bool
-	SchedulingPoll       time.Duration
-	RequestTimeoutMillis time.Duration
-	SchedulingTZ         string
-	RuntimeType          string // "docker" o "memory"
-	CORSAllowedOrigins   string // CORS allowed origins, default "*"
-	LogLevel             string // "debug", "info", "warn", "error", default "info"
+	GinMode            string
+	SchedulingEnabled  bool
+	SchedulingPoll     time.Duration
+	RequestTimeout     time.Duration
+	SchedulingTZ       string
+	RuntimeType        string // "docker" o "memory"
+	CORSAllowedOrigins string // CORS allowed origins, default "*"
+	LogLevel           string // "debug", "info", "warn", "error", default "info"
 }
 
 // LoadConfig loads configuration from file, env vars and validates required fields.
@@ -118,14 +118,14 @@ func LoadConfig() (*Config, error) {
 			PersistInterval: time.Duration(viper.GetInt("data.persist_interval_secs")) * time.Second,
 		},
 		Misc: MiscConfig{
-			GinMode:              viper.GetString("misc.gin_mode"),
-			SchedulingEnabled:    viper.GetBool("misc.scheduling_enabled"),
-			SchedulingPoll:       time.Duration(viper.GetInt("misc.scheduling_poll_interval_secs")) * time.Second,
-			RequestTimeoutMillis: time.Duration(viper.GetInt("misc.request_timeout_millis")) * time.Millisecond,
-			SchedulingTZ:         viper.GetString("misc.scheduling_timezone"),
-			RuntimeType:          viper.GetString("misc.runtime_type"),
-			CORSAllowedOrigins:   viper.GetString("misc.cors_allowed_origins"),
-			LogLevel:             viper.GetString("misc.log_level"),
+			GinMode:            viper.GetString("misc.gin_mode"),
+			SchedulingEnabled:  viper.GetBool("misc.scheduling_enabled"),
+			SchedulingPoll:     time.Duration(viper.GetInt("misc.scheduling_poll_interval_secs")) * time.Second,
+			RequestTimeout:     time.Duration(viper.GetInt("misc.request_timeout_millis")) * time.Millisecond,
+			SchedulingTZ:       viper.GetString("misc.scheduling_timezone"),
+			RuntimeType:        viper.GetString("misc.runtime_type"),
+			CORSAllowedOrigins: viper.GetString("misc.cors_allowed_origins"),
+			LogLevel:           viper.GetString("misc.log_level"),
 		},
 	}
 
@@ -167,7 +167,7 @@ func (c *Config) validate() error {
 	if c.Misc.SchedulingPoll <= 0 {
 		return fmt.Errorf("misc.scheduling_poll_interval_secs must be positive")
 	}
-	if c.Misc.RequestTimeoutMillis <= 0 {
+	if c.Misc.RequestTimeout <= 0 {
 		return fmt.Errorf("misc.request_timeout_millis must be positive")
 	}
 	if c.Misc.SchedulingTZ != "" && c.Misc.SchedulingTZ != "Local" {
