@@ -30,30 +30,7 @@ jobs:
           go test ./... -coverprofile=coverage/coverage.out -covermode=atomic
           go tool cover -func=coverage/coverage.out > coverage/coverage.txt
 
-      - name: Generate coverage chart
-        run: |
-          pip install matplotlib
-          python3 <<'EOF'
-import matplotlib.pyplot as plt
-
-data, labels = [], []
-
-with open("coverage/coverage.txt") as f:
-    for line in f:
-        if "%" in line and not line.startswith("total:"):
-            parts = line.split()
-            labels.append(parts[0])
-            data.append(float(parts[-1].replace("%","")))
-
-plt.figure(figsize=(10,6))
-plt.barh(labels, data, color="#4C9AFF")
-plt.xlabel("Coverage %")
-plt.title("Go Package Coverage")
-plt.tight_layout()
-plt.savefig("coverage/coverage.png")
-EOF
-
-      - name: Extract total coverage for badge
+      - name: Extract total coverage
         id: cov
         run: |
           total=$(grep -E "^total:" coverage/coverage.txt | awk '{print $3}' | sed 's/%//')
@@ -62,71 +39,53 @@ EOF
       - name: Prepare public directory
         run: mkdir -p public
 
-      - name: Generate coverage badge
+      - name: Generate badge
         run: |
           pct=${{ steps.cov.outputs.percentage }}
           color="red"
           if (( $(echo "$pct > 90" | bc -l) )); then color="brightgreen"; fi
           if (( $(echo "$pct > 75" | bc -l) )); then color="green"; fi
           if (( $(echo "$pct > 60" | bc -l) )); then color="yellow"; fi
+
           echo "<img src=\"https://img.shields.io/badge/Coverage-$pct%25-$color\"/>" > public/badge.html
 
-      - name: Copy coverage files
-        run: |
-          cp coverage/coverage.txt public/
-          cp coverage/coverage.png public/
+      - name: Copy coverage text file
+        run: cp coverage/coverage.txt public/
 
       - name: Generate index.html
         run: |
-          python3 <<'EOF'
-import base64
+          pct=${{ steps.cov.outputs.percentage }}
+          badge=$(cat public/badge.html)
 
-with open("public/coverage.txt") as f:
-    coverage_text = f.read()
-
-with open("public/badge.html") as f:
-    badge_html = f.read()
-
-with open("public/coverage.png", "rb") as f:
-    chart_b64 = base64.b64encode(f.read()).decode()
-
-html = f"""
+          cat > public/index.html <<EOF
 <!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8">
 <title>Go Coverage Report</title>
 <style>
-body {{ font-family: Arial; background: #f4f6f8; margin:0 }}
-header {{ background:#24292f; color:#fff; padding:20px; text-align:center }}
-.container {{ max-width:900px; margin:30px auto; background:#fff; padding:25px;
-border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1) }}
-pre {{ background:#f3f3f3; padding:15px; border:1px solid #ddd; border-radius:6px }}
-.center {{ text-align:center }}
-.chart {{ max-width:600px; width:100% }}
+body { font-family: Arial; background: #f4f6f8; margin:0 }
+header { background:#24292f; color:#fff; padding:20px; text-align:center }
+.container { max-width:900px; margin:30px auto; background:#fff; padding:25px;
+border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1) }
+pre { background:#f3f3f3; padding:15px; border:1px solid #ddd; border-radius:6px }
+.center { text-align:center }
 </style>
 </head>
 <body>
 <header><h1>Go Coverage Report</h1></header>
 <div class="container">
 <h2>📊 Coverage Badge</h2>
-<div class="center">{badge_html}</div>
+<div class="center">$badge</div>
 
 <h2>📑 Coverage Table</h2>
-<pre>{coverage_text}</pre>
-
-<h2>📈 Coverage Chart</h2>
-<div class="center">
-<img src="data:image/png;base64,{chart_b64}" class="chart"/>
-</div>
+<pre>
+$(cat public/coverage.txt)
+</pre>
 
 </div>
 </body>
 </html>
-"""
-
-with open("public/index.html", "w") as f:
-    f.write(html)
 EOF
 
       - name: Upload artifact for Pages
