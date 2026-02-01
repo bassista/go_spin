@@ -436,6 +436,13 @@ func (m *mockSaver) Save(ctx context.Context, doc *repository.DataDocument) erro
 	return nil
 }
 
+// Count returns the number of saved documents in a thread-safe manner.
+func (m *mockSaver) Count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.savedDocs)
+}
+
 func TestStartPersistenceScheduler_PeriodicFlush(t *testing.T) {
 	doc := createTestDocument()
 	store := NewStore(doc)
@@ -455,7 +462,7 @@ func TestStartPersistenceScheduler_PeriodicFlush(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Should have saved at least once
-	if len(saver.savedDocs) < 1 {
+	if saver.Count() < 1 {
 		t.Error("expected at least one save operation")
 	}
 
@@ -482,7 +489,7 @@ func TestStartPersistenceScheduler_NotDirtySkipsFlush(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Should not have saved since store wasn't dirty
-	if len(saver.savedDocs) > 0 {
+	if saver.Count() > 0 {
 		t.Error("expected no saves when store is not dirty")
 	}
 }
@@ -528,7 +535,7 @@ func TestStartPersistenceScheduler_FinalFlushOnShutdown(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Should have done final flush
-	if len(saver.savedDocs) < 1 {
+	if saver.Count() < 1 {
 		t.Error("expected final flush on shutdown")
 	}
 }
@@ -721,11 +728,7 @@ func TestStartPersistenceScheduler_ConcurrentModifications(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Should have saved at least once
-	saver.mu.Lock()
-	saveCount := len(saver.savedDocs)
-	saver.mu.Unlock()
-
-	if saveCount < 1 {
+	if saver.Count() < 1 {
 		t.Error("expected at least one save during concurrent modifications")
 	}
 }
