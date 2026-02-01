@@ -103,6 +103,7 @@ header {{ background:#24292f; color:#fff; padding:20px; text-align:center }}
 border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1) }}
 pre {{ background:#f3f3f3; padding:15px; border:1px solid #ddd; border-radius:6px }}
 .center {{ text-align:center }}
+.chart {{ max-width:600px; width:100% }}
 </style>
 </head>
 <body>
@@ -110,12 +111,15 @@ pre {{ background:#f3f3f3; padding:15px; border:1px solid #ddd; border-radius:6p
 <div class="container">
 <h2>📊 Coverage Badge</h2>
 <div class="center">{badge_html}</div>
+
 <h2>📑 Coverage Table</h2>
 <pre>{coverage_text}</pre>
+
 <h2>📈 Coverage Chart</h2>
 <div class="center">
 <img src="data:image/png;base64,{chart_b64}" class="chart"/>
 </div>
+
 </div>
 </body>
 </html>
