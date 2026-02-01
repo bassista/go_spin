@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/bassista/go_spin/internal/repository"
@@ -14,6 +15,7 @@ import (
 
 // mockContainerRuntime implements runtime.ContainerRuntime for testing
 type mockContainerRuntime struct {
+	mu                sync.RWMutex
 	runningContainers map[string]bool
 	startErr          error
 	stopErr           error
@@ -27,6 +29,8 @@ func newMockRuntime() *mockContainerRuntime {
 }
 
 func (m *mockContainerRuntime) IsRunning(ctx context.Context, name string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if m.isRunningErr != nil {
 		return false, m.isRunningErr
 	}
@@ -34,6 +38,8 @@ func (m *mockContainerRuntime) IsRunning(ctx context.Context, name string) (bool
 }
 
 func (m *mockContainerRuntime) Start(ctx context.Context, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.startErr != nil {
 		return m.startErr
 	}
@@ -42,6 +48,8 @@ func (m *mockContainerRuntime) Start(ctx context.Context, name string) error {
 }
 
 func (m *mockContainerRuntime) Stop(ctx context.Context, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.stopErr != nil {
 		return m.stopErr
 	}
