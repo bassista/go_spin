@@ -223,6 +223,11 @@ docker-compose up
 go test ./...
 ```
 
+
+## 📊 Coverage Report
+👉 [Visualizza il report di coverage](https://bassista.github.io/go_spin/)
+
+
 ## 🏗️ Architecture
 
 ```

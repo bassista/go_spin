@@ -89,6 +89,17 @@ jobs:
         with:
           path: public
 
+      - name: Generate PNG badge
+        run: |
+          pct=${{ steps.cov.outputs.percentage }}
+          color="red"
+          if (( $(echo "$pct > 90" | bc -l) )); then color="brightgreen"; fi
+          if (( $(echo "$pct > 75" | bc -l) )); then color="green"; fi
+          if (( $(echo "$pct > 60" | bc -l) )); then color="yellow"; fi
+
+          curl -L "https://img.shields.io/badge/Coverage-${pct}%25-${color}.png" \
+            -o public/coverage.png
+
   deploy:
     runs-on: ubuntu-latest
     needs: coverage
