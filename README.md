@@ -225,7 +225,9 @@ go test ./...
 
 
 ## 📊 Coverage Report
-👉 [Visualizza il report di coverage](https://bassista.github.io/go_spin/)
+👉 [View the coverage report here](https://bassista.github.io/go_spin/)
+
+[![Coverage](https://bassista.github.io/go_spin/coverage.png)](https://bassista.github.io/go_spin/)
 
 
 ## 🏗️ Architecture

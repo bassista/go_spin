@@ -84,11 +84,6 @@ jobs:
           echo "</body>" >> public/index.html
           echo "</html>" >> public/index.html
 
-      - name: Upload artifact for Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: public
-
       - name: Generate PNG badge
         run: |
           pct=${{ steps.cov.outputs.percentage }}
@@ -100,6 +95,11 @@ jobs:
           curl -L "https://img.shields.io/badge/Coverage-${pct}%25-${color}.png" \
             -o public/coverage.png
 
+      - name: Upload artifact for Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+                      
   deploy:
     runs-on: ubuntu-latest
     needs: coverage
