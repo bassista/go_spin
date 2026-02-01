@@ -3,10 +3,12 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
 func boolPtrJSON(b bool) *bool {
@@ -533,4 +535,483 @@ func TestJSONRepository_SaveWithContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for cancelled context")
 	}
+}
+
+// TestJSONRepository_StartWatcher_Success verifies that the watcher starts correctly
+// and shuts down cleanly when context is cancelled.
+func TestJSONRepository_StartWatcher_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := createTestDataDocument()
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	jsonRepo := repo.(*JSONRepository)
+
+	cache := &MockCacheStore{
+		lastUpdate: 1000,
+		dirty:      false,
+		doc:        doc,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = jsonRepo.StartWatcher(ctx, cache)
+	if err != nil {
+		t.Fatalf("failed to start watcher: %v", err)
+	}
+
+	// Give the watcher time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel context to stop watcher
+	cancel()
+
+	// Give the watcher time to shut down
+	time.Sleep(50 * time.Millisecond)
+}
+
+// TestJSONRepository_StartWatcher_FileChange verifies that file changes trigger reload.
+func TestJSONRepository_StartWatcher_FileChange(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := createTestDataDocument()
+	doc.Metadata.LastUpdate = 1000
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	jsonRepo := repo.(*JSONRepository)
+
+	cache := &MockCacheStore{
+		lastUpdate: 500, // Older than disk
+		dirty:      false,
+		doc:        DataDocument{},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = jsonRepo.StartWatcher(ctx, cache)
+	if err != nil {
+		t.Fatalf("failed to start watcher: %v", err)
+	}
+
+	// Give the watcher time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Modify the file
+	doc.Metadata.LastUpdate = 2000
+	doc.Containers[0].FriendlyName = "Updated Container"
+	data, _ = json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to update test file: %v", err)
+	}
+
+	// Wait for debounce + processing
+	time.Sleep(400 * time.Millisecond)
+
+	if !cache.replaced {
+		t.Error("expected cache to be replaced after file change")
+	}
+
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+}
+
+// TestJSONRepository_MakeWatcherCallback_LoadError verifies behavior when load fails.
+func TestJSONRepository_MakeWatcherCallback_LoadError(t *testing.T) {
+	// Create repo pointing to non-existent file
+	repo, _ := NewJSONRepository("/nonexistent/path/config.json")
+	jsonRepo := repo.(*JSONRepository)
+
+	cache := &MockCacheStore{
+		lastUpdate: 1000,
+		dirty:      false,
+		doc:        DataDocument{},
+	}
+
+	callback := jsonRepo.MakeWatcherCallback(cache)
+	// Should not panic, just log error
+	callback()
+
+	if cache.replaced {
+		t.Error("expected cache NOT to be replaced when load fails")
+	}
+}
+
+// TestJSONRepository_MakeWatcherCallback_DifferentContentSameTimestamp verifies
+// replacement when content differs but timestamp is the same.
+func TestJSONRepository_MakeWatcherCallback_DifferentContentSameTimestamp(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := createTestDataDocument()
+	doc.Metadata.LastUpdate = 1000
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, _ := NewJSONRepository(configPath)
+	jsonRepo := repo.(*JSONRepository)
+
+	// Cache has same timestamp but different content
+	cacheDoc := createTestDataDocument()
+	cacheDoc.Metadata.LastUpdate = 1000
+	cacheDoc.Containers[0].FriendlyName = "Different Name"
+
+	cache := &MockCacheStore{
+		lastUpdate: 1000, // Same as disk
+		dirty:      false,
+		doc:        cacheDoc, // Different content
+	}
+
+	callback := jsonRepo.MakeWatcherCallback(cache)
+	callback()
+
+	if !cache.replaced {
+		t.Error("expected cache to be replaced when content differs")
+	}
+}
+
+// MockCacheStoreWithSnapshotError is a mock that returns error on Snapshot
+type MockCacheStoreWithSnapshotError struct {
+	lastUpdate int64
+	dirty      bool
+}
+
+func (m *MockCacheStoreWithSnapshotError) GetLastUpdate() int64 {
+	return m.lastUpdate
+}
+
+func (m *MockCacheStoreWithSnapshotError) IsDirty() bool {
+	return m.dirty
+}
+
+func (m *MockCacheStoreWithSnapshotError) Snapshot() (DataDocument, error) {
+	return DataDocument{}, errors.New("snapshot error")
+}
+
+func (m *MockCacheStoreWithSnapshotError) Replace(doc DataDocument) error {
+	return nil
+}
+
+// TestJSONRepository_MakeWatcherCallback_SnapshotError verifies behavior when snapshot fails.
+func TestJSONRepository_MakeWatcherCallback_SnapshotError(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := createTestDataDocument()
+	doc.Metadata.LastUpdate = 1000
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, _ := NewJSONRepository(configPath)
+	jsonRepo := repo.(*JSONRepository)
+
+	cache := &MockCacheStoreWithSnapshotError{
+		lastUpdate: 1000, // Same as disk, will trigger snapshot
+		dirty:      false,
+	}
+
+	callback := jsonRepo.MakeWatcherCallback(cache)
+	// Should not panic, just log error
+	callback()
+}
+
+// MockCacheStoreWithReplaceError is a mock that returns error on Replace
+type MockCacheStoreWithReplaceError struct {
+	lastUpdate int64
+	dirty      bool
+	doc        DataDocument
+}
+
+func (m *MockCacheStoreWithReplaceError) GetLastUpdate() int64 {
+	return m.lastUpdate
+}
+
+func (m *MockCacheStoreWithReplaceError) IsDirty() bool {
+	return m.dirty
+}
+
+func (m *MockCacheStoreWithReplaceError) Snapshot() (DataDocument, error) {
+	return m.doc, nil
+}
+
+func (m *MockCacheStoreWithReplaceError) Replace(doc DataDocument) error {
+	return errors.New("replace error")
+}
+
+// TestJSONRepository_MakeWatcherCallback_ReplaceError verifies behavior when replace fails.
+func TestJSONRepository_MakeWatcherCallback_ReplaceError(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := createTestDataDocument()
+	doc.Metadata.LastUpdate = 2000
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, _ := NewJSONRepository(configPath)
+	jsonRepo := repo.(*JSONRepository)
+
+	cache := &MockCacheStoreWithReplaceError{
+		lastUpdate: 1000, // Older than disk
+		dirty:      false,
+		doc:        DataDocument{},
+	}
+
+	callback := jsonRepo.MakeWatcherCallback(cache)
+	// Should not panic, just log error
+	callback()
+}
+
+// TestJSONRepository_Save_ToNonExistentDirectory verifies error handling
+// when saving to a directory that doesn't exist.
+func TestJSONRepository_Save_ToNonExistentDirectory(t *testing.T) {
+	repo, _ := NewJSONRepository("/nonexistent/dir/config.json")
+
+	doc := createTestDataDocument()
+	err := repo.Save(context.Background(), &doc)
+	if err == nil {
+		t.Error("expected error when saving to non-existent directory")
+	}
+}
+
+// TestJSONRepository_StartWatcher_InvalidDirectory verifies error when watching
+// a non-existent directory.
+func TestJSONRepository_StartWatcher_InvalidDirectory(t *testing.T) {
+	repo, _ := NewJSONRepository("/nonexistent/dir/config.json")
+	jsonRepo := repo.(*JSONRepository)
+
+	cache := &MockCacheStore{
+		lastUpdate: 1000,
+		dirty:      false,
+		doc:        DataDocument{},
+	}
+
+	ctx := context.Background()
+	err := jsonRepo.StartWatcher(ctx, cache)
+	if err == nil {
+		t.Error("expected error when watching non-existent directory")
+	}
+}
+
+// TestJSONRepository_StartWatcher_RemoveEvent verifies handling of remove events.
+func TestJSONRepository_StartWatcher_RemoveEvent(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := createTestDataDocument()
+	doc.Metadata.LastUpdate = 1000
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	jsonRepo := repo.(*JSONRepository)
+
+	cache := &MockCacheStore{
+		lastUpdate: 500,
+		dirty:      false,
+		doc:        DataDocument{},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = jsonRepo.StartWatcher(ctx, cache)
+	if err != nil {
+		t.Fatalf("failed to start watcher: %v", err)
+	}
+
+	// Give the watcher time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Remove the file
+	os.Remove(configPath)
+
+	// Wait a bit
+	time.Sleep(100 * time.Millisecond)
+
+	// Recreate the file with new content
+	doc.Metadata.LastUpdate = 2000
+	data, _ = json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to recreate test file: %v", err)
+	}
+
+	// Wait for debounce + processing
+	time.Sleep(400 * time.Millisecond)
+
+	if !cache.replaced {
+		t.Error("expected cache to be replaced after file recreated")
+	}
+
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+}
+
+// TestJSONRepository_StartWatcher_IgnoresOtherFiles verifies that changes to
+// other files in the same directory are ignored.
+func TestJSONRepository_StartWatcher_IgnoresOtherFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	otherPath := filepath.Join(tmpDir, "other.json")
+
+	doc := createTestDataDocument()
+	doc.Metadata.LastUpdate = 1000
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	jsonRepo := repo.(*JSONRepository)
+
+	cache := &MockCacheStore{
+		lastUpdate: 500,
+		dirty:      false,
+		doc:        DataDocument{},
+		replaced:   false,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = jsonRepo.StartWatcher(ctx, cache)
+	if err != nil {
+		t.Fatalf("failed to start watcher: %v", err)
+	}
+
+	// Give the watcher time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Write to a different file
+	if err := os.WriteFile(otherPath, []byte("{}"), 0644); err != nil {
+		t.Fatalf("failed to create other file: %v", err)
+	}
+
+	// Wait to ensure no spurious reload
+	time.Sleep(400 * time.Millisecond)
+
+	if cache.replaced {
+		t.Error("expected cache NOT to be replaced when other file changes")
+	}
+
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+}
+
+// TestJSONRepository_StartWatcher_DebounceMultipleEvents verifies that multiple
+// rapid events are debounced into a single reload.
+func TestJSONRepository_StartWatcher_DebounceMultipleEvents(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := createTestDataDocument()
+	doc.Metadata.LastUpdate = 1000
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	jsonRepo := repo.(*JSONRepository)
+
+	replaceCount := 0
+	cache := &MockCacheStoreCountingReplaces{
+		lastUpdate:   500,
+		dirty:        false,
+		doc:          DataDocument{},
+		replaceCount: &replaceCount,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = jsonRepo.StartWatcher(ctx, cache)
+	if err != nil {
+		t.Fatalf("failed to start watcher: %v", err)
+	}
+
+	// Give the watcher time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Rapid successive writes
+	for i := 0; i < 5; i++ {
+		doc.Metadata.LastUpdate = int64(2000 + i)
+		data, _ = json.MarshalIndent(doc, "", "  ")
+		if err := os.WriteFile(configPath, data, 0644); err != nil {
+			t.Fatalf("failed to update test file: %v", err)
+		}
+		time.Sleep(50 * time.Millisecond) // Less than debounce time
+	}
+
+	// Wait for debounce + processing
+	time.Sleep(400 * time.Millisecond)
+
+	// Should have been called only once due to debouncing
+	if replaceCount > 2 { // Allow some tolerance
+		t.Errorf("expected debouncing to reduce reload count, got %d replaces", replaceCount)
+	}
+
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+}
+
+// MockCacheStoreCountingReplaces counts how many times Replace is called
+type MockCacheStoreCountingReplaces struct {
+	lastUpdate   int64
+	dirty        bool
+	doc          DataDocument
+	replaceCount *int
+}
+
+func (m *MockCacheStoreCountingReplaces) GetLastUpdate() int64 {
+	return m.lastUpdate
+}
+
+func (m *MockCacheStoreCountingReplaces) IsDirty() bool {
+	return m.dirty
+}
+
+func (m *MockCacheStoreCountingReplaces) Snapshot() (DataDocument, error) {
+	return m.doc, nil
+}
+
+func (m *MockCacheStoreCountingReplaces) Replace(doc DataDocument) error {
+	*m.replaceCount++
+	m.doc = doc
+	m.lastUpdate = doc.Metadata.LastUpdate
+	return nil
 }

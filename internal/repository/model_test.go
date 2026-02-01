@@ -162,3 +162,83 @@ func TestAreDataDocumentsEqual_DifferentContent(t *testing.T) {
 		t.Error("expected documents with different content to not be equal")
 	}
 }
+
+func TestAreDataDocumentsEqual_EmptyDocuments(t *testing.T) {
+	doc1 := &DataDocument{}
+	doc2 := &DataDocument{}
+
+	if !AreDataDocumentsEqual(doc1, doc2) {
+		t.Error("expected empty documents to be equal")
+	}
+}
+
+func TestAreDataDocumentsEqual_DifferentGroups(t *testing.T) {
+	doc1 := &DataDocument{
+		Groups: []Group{{Name: "g1", Container: []string{"c1"}, Active: boolPtr(true)}},
+	}
+	doc2 := &DataDocument{
+		Groups: []Group{{Name: "g2", Container: []string{"c2"}, Active: boolPtr(false)}},
+	}
+
+	if AreDataDocumentsEqual(doc1, doc2) {
+		t.Error("expected documents with different groups to not be equal")
+	}
+}
+
+func TestAreDataDocumentsEqual_DifferentSchedules(t *testing.T) {
+	doc1 := &DataDocument{
+		Schedules: []Schedule{{ID: "s1", Target: "c1", TargetType: "container"}},
+	}
+	doc2 := &DataDocument{
+		Schedules: []Schedule{{ID: "s2", Target: "c2", TargetType: "group"}},
+	}
+
+	if AreDataDocumentsEqual(doc1, doc2) {
+		t.Error("expected documents with different schedules to not be equal")
+	}
+}
+
+func TestAreDataDocumentsEqual_DifferentOrder(t *testing.T) {
+	doc1 := &DataDocument{
+		Order: []string{"c1", "c2"},
+	}
+	doc2 := &DataDocument{
+		Order: []string{"c2", "c1"},
+	}
+
+	if AreDataDocumentsEqual(doc1, doc2) {
+		t.Error("expected documents with different order to not be equal")
+	}
+}
+
+func TestAreDataDocumentsEqual_SameTimers(t *testing.T) {
+	doc1 := &DataDocument{
+		Schedules: []Schedule{
+			{
+				ID:         "s1",
+				Target:     "c1",
+				TargetType: "container",
+				Timers: []Timer{
+					{StartTime: "08:00", StopTime: "18:00", Days: []int{1, 2, 3}, Active: boolPtr(true)},
+				},
+			},
+		},
+	}
+	doc2 := &DataDocument{
+		Metadata: Metadata{LastUpdate: 9999}, // Different metadata should be ignored
+		Schedules: []Schedule{
+			{
+				ID:         "s1",
+				Target:     "c1",
+				TargetType: "container",
+				Timers: []Timer{
+					{StartTime: "08:00", StopTime: "18:00", Days: []int{1, 2, 3}, Active: boolPtr(true)},
+				},
+			},
+		},
+	}
+
+	if !AreDataDocumentsEqual(doc1, doc2) {
+		t.Error("expected documents with same timers (ignoring metadata) to be equal")
+	}
+}

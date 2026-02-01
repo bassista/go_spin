@@ -9,8 +9,16 @@ import (
 	"github.com/moby/moby/client"
 )
 
+// DockerClient defines the interface for Docker client operations used by DockerRuntime.
+// This interface allows for mocking in tests.
+type DockerClient interface {
+	ContainerInspect(ctx context.Context, containerID string, options client.ContainerInspectOptions) (client.ContainerInspectResult, error)
+	ContainerStart(ctx context.Context, containerID string, options client.ContainerStartOptions) (client.ContainerStartResult, error)
+	ContainerStop(ctx context.Context, containerID string, options client.ContainerStopOptions) (client.ContainerStopResult, error)
+}
+
 type DockerRuntime struct {
-	cli *client.Client
+	cli DockerClient
 }
 
 func NewDockerRuntime() (*DockerRuntime, error) {
@@ -19,6 +27,12 @@ func NewDockerRuntime() (*DockerRuntime, error) {
 		return nil, fmt.Errorf("error creating Docker client: %w", err)
 	}
 	return &DockerRuntime{cli: cli}, nil
+}
+
+// NewDockerRuntimeWithClient creates a DockerRuntime with a custom client.
+// This is primarily used for testing purposes.
+func NewDockerRuntimeWithClient(cli DockerClient) *DockerRuntime {
+	return &DockerRuntime{cli: cli}
 }
 
 func (d *DockerRuntime) IsRunning(ctx context.Context, containerName string) (bool, error) {
