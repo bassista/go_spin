@@ -156,6 +156,17 @@ func (s *Store) RemoveContainer(name string) (repository.DataDocument, error) {
 	// Mark cache as dirty after mutation
 	s.dirty = true
 
+	// Remove schedules that target this container
+	newSchedules := make([]repository.Schedule, 0, len(s.data.Schedules))
+	for _, sch := range s.data.Schedules {
+		if sch.TargetType == "container" && sch.Target == name {
+			logger.WithComponent("cache").Debugf("removing schedule %s because it targets deleted container %s", sch.ID, name)
+			continue
+		}
+		newSchedules = append(newSchedules, sch)
+	}
+	s.data.Schedules = newSchedules
+
 	return cloneData(s.data)
 }
 
@@ -230,6 +241,17 @@ func (s *Store) RemoveGroup(name string) (repository.DataDocument, error) {
 
 	// Mark cache as dirty after mutation
 	s.dirty = true
+
+	// Remove schedules that target this group
+	newSchedules := make([]repository.Schedule, 0, len(s.data.Schedules))
+	for _, sch := range s.data.Schedules {
+		if sch.TargetType == "group" && sch.Target == name {
+			logger.WithComponent("cache").Debugf("removing schedule %s because it targets deleted group %s", sch.ID, name)
+			continue
+		}
+		newSchedules = append(newSchedules, sch)
+	}
+	s.data.Schedules = newSchedules
 
 	return cloneData(s.data)
 }

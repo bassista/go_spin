@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
 	"github.com/bassista/go_spin/internal/cache"
 	"github.com/bassista/go_spin/internal/logger"
 	"github.com/bassista/go_spin/internal/repository"
+	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 )
@@ -17,9 +19,9 @@ type ContainerController struct {
 }
 
 // NewContainerController creates a new ContainerController with the given cache store.
-func NewContainerController(store cache.ContainerStore) *ContainerController {
+func NewContainerController(store cache.ContainerStore, runtime runtime.ContainerRuntime, ctx context.Context) *ContainerController {
 	v := validator.New()
-	service := &ContainerCrudService{Store: store}
+	service := &ContainerCrudService{Store: store, Runtime: runtime, Ctx: ctx}
 	validator := &ContainerCrudValidator{validator: v}
 
 	return &ContainerController{

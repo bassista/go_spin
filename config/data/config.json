@@ -1,13 +1,13 @@
 {
   "metadata": {
-    "lastUpdate": 1769946319703
+    "lastUpdate": 1769960649655
   },
   "containers": [
     {
       "name": "qbittorrent",
       "friendly_name": "qb781",
-      "url": "http://qb.local.met",
-      "running": false,
+      "url": "https://deluge.lan.asga.uk",
+      "running": true,
       "active": true,
       "activatedAt": null
     },
@@ -18,20 +18,11 @@
       "running": true,
       "active": true,
       "activatedAt": null
-    },
-    {
-      "name": "nginx",
-      "friendly_name": "Nginx Web Server",
-      "url": "http://nginx.local1",
-      "running": false,
-      "active": true,
-      "activatedAt": null
     }
   ],
   "order": [
     "qbittorrent",
-    "plex",
-    "nginx"
+    "plex"
   ],
   "groups": [
     {
@@ -41,25 +32,26 @@
       ],
       "name": "Media",
       "active": true
-    },
-    {
-      "container": [
-        "nginx1",
-        "plex"
-      ],
-      "name": "Development",
-      "active": true
     }
   ],
   "groupOrder": [
-    "Media",
-    "Development"
+    "Media"
   ],
   "schedules": [
     {
       "target": "qbittorrent",
       "targetType": "container",
-      "timers": [],
+      "timers": [
+        {
+          "startTime": "16:45",
+          "stopTime": "16:47",
+          "days": [
+            0,
+            6
+          ],
+          "active": true
+        }
+      ],
       "id": "1765309098671-421"
     },
     {
@@ -99,41 +91,6 @@
         }
       ],
       "id": "1765934978194-5158"
-    },
-    {
-      "target": "nginx",
-      "targetType": "container",
-      "timers": [
-        {
-          "startTime": "12:46",
-          "stopTime": "12:49",
-          "days": [
-            0,
-            1,
-            2,
-            3,
-            5
-          ],
-          "active": true
-        }
-      ],
-      "id": "schedule-001"
-    },
-    {
-      "target": "Development",
-      "targetType": "group",
-      "timers": [
-        {
-          "startTime": "11:00",
-          "stopTime": "11:26",
-          "days": [
-            0,
-            6
-          ],
-          "active": true
-        }
-      ],
-      "id": "schedule-group-001"
     }
   ]
 }

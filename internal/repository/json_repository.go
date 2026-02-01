@@ -52,11 +52,11 @@ func NewJSONRepository(path string) (Repository, error) {
 // Load reads the JSON file, parses and validates it.
 // It respects context cancellation before performing I/O operations.
 func (r *JSONRepository) Load(ctx context.Context) (*DataDocument, error) {
-	logger.WithComponent("json-repo").Debugf("loading data from: %s", r.path)
+	logger.WithComponent("json-repo").Tracef("loading data from: %s", r.path)
 
 	// Check for context cancellation before acquiring lock
 	if err := ctx.Err(); err != nil {
-		logger.WithComponent("json-repo").Debugf("load cancelled: %v", err)
+		logger.WithComponent("json-repo").Warnf("load cancelled: %v", err)
 		return nil, fmt.Errorf("load cancelled: %w", err)
 	}
 
@@ -65,16 +65,16 @@ func (r *JSONRepository) Load(ctx context.Context) (*DataDocument, error) {
 
 	// Check again after acquiring lock
 	if err := ctx.Err(); err != nil {
-		logger.WithComponent("json-repo").Debugf("load cancelled: %v", err)
+		logger.WithComponent("json-repo").Warnf("load cancelled: %v", err)
 		return nil, fmt.Errorf("load cancelled: %w", err)
 	}
 
 	doc, err := r.loadUnlocked()
 	if err != nil {
-		logger.WithComponent("json-repo").Debugf("load failed: %v", err)
+		logger.WithComponent("json-repo").Warnf("load failed: %v", err)
 		return nil, err
 	}
-	logger.WithComponent("json-repo").Debugf("loaded data successfully, lastUpdate: %d, containers: %d, groups: %d, schedules: %d", doc.Metadata.LastUpdate, len(doc.Containers), len(doc.Groups), len(doc.Schedules))
+	logger.WithComponent("json-repo").Tracef("loaded data successfully, lastUpdate: %d, containers: %d, groups: %d, schedules: %d", doc.Metadata.LastUpdate, len(doc.Containers), len(doc.Groups), len(doc.Schedules))
 	return doc, nil
 }
 
@@ -231,7 +231,7 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore
 		for {
 			select {
 			case <-ctx.Done():
-				logger.WithComponent("json-repo").Debugf("file watcher shutting down")
+				logger.WithComponent("json-repo").Infof("file watcher shutting down")
 				return
 			case event, ok := <-watcher.Events:
 				if !ok {
@@ -240,7 +240,7 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore
 				if filepath.Base(event.Name) != r.base {
 					continue
 				}
-				logger.WithComponent("json-repo").Debugf("file event detected: %s (op: %v)", event.Name, event.Op)
+				logger.WithComponent("json-repo").Tracef("file event detected: %s (op: %v)", event.Name, event.Op)
 				// Writes/Create/Chmod cover normal edits and atomic replace; trigger reload.
 				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Chmod) != 0 {
 					schedule()

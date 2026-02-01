@@ -129,6 +129,8 @@ function app() {
                 });
                 if (!res.ok) throw new Error(await res.text());
                 this.containers = await res.json();
+                // Refresh schedules tab because schedules targeting this container were removed server-side
+                await this.loadSchedules();
                 this.showSuccess('Container deleted');
             } catch (e) {
                 this.showError('Failed to delete container: ' + e.message);
@@ -241,6 +243,8 @@ function app() {
                 });
                 if (!res.ok) throw new Error(await res.text());
                 this.groups = await res.json();
+                // Refresh schedules tab because schedules targeting this group were removed server-side
+                await this.loadSchedules();
                 this.showSuccess('Group deleted');
             } catch (e) {
                 this.showError('Failed to delete group: ' + e.message);

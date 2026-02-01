@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -49,6 +50,21 @@ func (m *mockContainerStore) RemoveContainer(name string) (repository.DataDocume
 	return repository.DataDocument{}, cache.ErrContainerNotFound
 }
 
+// mockContainerRuntimeForContainer implements runtime.ContainerRuntime for testing
+type mockContainerRuntimeForContainer struct{}
+
+func (m *mockContainerRuntimeForContainer) IsRunning(ctx context.Context, containerName string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockContainerRuntimeForContainer) Start(ctx context.Context, containerName string) error {
+	return nil
+}
+
+func (m *mockContainerRuntimeForContainer) Stop(ctx context.Context, containerName string) error {
+	return nil
+}
+
 func TestContainerController_AllContainers(t *testing.T) {
 	active := true
 	running := false
@@ -61,7 +77,7 @@ func TestContainerController_AllContainers(t *testing.T) {
 		},
 	}
 
-	cc := NewContainerController(store)
+	cc := NewContainerController(store, &mockContainerRuntimeForContainer{}, context.Background())
 
 	r := gin.New()
 	r.GET("/containers", cc.AllContainers)
@@ -92,7 +108,7 @@ func TestContainerController_CreateOrUpdateContainer_Valid(t *testing.T) {
 		},
 	}
 
-	cc := NewContainerController(store)
+	cc := NewContainerController(store, &mockContainerRuntimeForContainer{}, context.Background())
 
 	r := gin.New()
 	r.POST("/container", cc.CreateOrUpdateContainer)
@@ -121,7 +137,7 @@ func TestContainerController_CreateOrUpdateContainer_Valid(t *testing.T) {
 
 func TestContainerController_CreateOrUpdateContainer_InvalidPayload(t *testing.T) {
 	store := &mockContainerStore{}
-	cc := NewContainerController(store)
+	cc := NewContainerController(store, &mockContainerRuntimeForContainer{}, context.Background())
 
 	r := gin.New()
 	r.POST("/container", cc.CreateOrUpdateContainer)
@@ -139,7 +155,7 @@ func TestContainerController_CreateOrUpdateContainer_InvalidPayload(t *testing.T
 
 func TestContainerController_CreateOrUpdateContainer_ValidationError(t *testing.T) {
 	store := &mockContainerStore{}
-	cc := NewContainerController(store)
+	cc := NewContainerController(store, &mockContainerRuntimeForContainer{}, context.Background())
 
 	r := gin.New()
 	r.POST("/container", cc.CreateOrUpdateContainer)
@@ -166,7 +182,7 @@ func TestContainerController_CreateOrUpdateContainer_StoreError(t *testing.T) {
 	store := &mockContainerStore{
 		addErr: errors.New("store error"),
 	}
-	cc := NewContainerController(store)
+	cc := NewContainerController(store, &mockContainerRuntimeForContainer{}, context.Background())
 
 	r := gin.New()
 	r.POST("/container", cc.CreateOrUpdateContainer)
@@ -203,7 +219,7 @@ func TestContainerController_DeleteContainer_Success(t *testing.T) {
 			},
 		},
 	}
-	cc := NewContainerController(store)
+	cc := NewContainerController(store, &mockContainerRuntimeForContainer{}, context.Background())
 
 	r := gin.New()
 	r.DELETE("/container/:name", cc.DeleteContainer)
@@ -224,7 +240,7 @@ func TestContainerController_DeleteContainer_NotFound(t *testing.T) {
 			Containers: []repository.Container{},
 		},
 	}
-	cc := NewContainerController(store)
+	cc := NewContainerController(store, &mockContainerRuntimeForContainer{}, context.Background())
 
 	r := gin.New()
 	r.DELETE("/container/:name", cc.DeleteContainer)
@@ -241,7 +257,7 @@ func TestContainerController_DeleteContainer_NotFound(t *testing.T) {
 
 func TestContainerController_DeleteContainer_MissingName(t *testing.T) {
 	store := &mockContainerStore{}
-	cc := NewContainerController(store)
+	cc := NewContainerController(store, &mockContainerRuntimeForContainer{}, context.Background())
 
 	r := gin.New()
 	// Route without :name param

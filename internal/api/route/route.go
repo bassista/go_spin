@@ -23,7 +23,7 @@ func SetupRoutes(r *gin.Engine, appCtx *app.App) {
 
 	timeout := appCtx.Config.Misc.RequestTimeoutMillis
 
-	NewContainerRouter(timeout, publicRouter, appCtx.Cache)
+	NewContainerRouter(appCtx.BaseCtx, timeout, publicRouter, appCtx.Cache, appCtx.Runtime)
 	NewGroupRouter(timeout, publicRouter, appCtx.Cache)
 	NewScheduleRouter(timeout, publicRouter, appCtx.Cache)
 	NewRuntimeRouter(timeout, publicRouter, appCtx.Runtime, appCtx.Cache)

@@ -25,7 +25,7 @@ type Container struct {
 	Name         string `json:"name" validate:"required"`
 	FriendlyName string `json:"friendly_name" validate:"required"`
 	URL          string `json:"url" validate:"required,url"`
-	Running      *bool  `json:"running" validate:"required"`
+	Running      *bool  `json:"running"`
 	Active       *bool  `json:"active" validate:"required"`
 	ActivatedAt  *int64 `json:"activatedAt"`
 }
