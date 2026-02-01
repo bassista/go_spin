@@ -129,12 +129,28 @@ GO_SPIN_MISC_RUNTIME_TYPE=memory
 | POST | `/schedule` | Create/update schedule |
 | DELETE | `/schedule/:id` | Delete schedule |
 
+
 ### Runtime Control
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/runtime/:name/status` | Check if container is running |
 | POST | `/runtime/:name/start` | Start container |
 | POST | `/runtime/:name/stop` | Stop container |
+| GET | `/runtime/:name/waiting` | Serve waiting HTML page for a container or group (starts if not running) |
+
+#### `/runtime/:name/waiting` endpoint
+Returns an HTML page (text/html) with a spinner and an automatic redirect when the container/group is ready.
+It replaces the following placeholders:
+
+- `{{CONTAINER_NAME}}` → requested name
+- `{{REDIRECT_URL}}` → URL of the container (or of the first container in the group)
+
+Response codes:
+- 404 if not found
+- 403 if not active
+- 200 with HTML if everything is OK
+
+If the container/group is not running, it is started in the background.
 
 ### Web UI
 | Method | Endpoint | Description |

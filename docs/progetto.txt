@@ -1,7 +1,8 @@
 # Agent Knowledge Base - go_spin
 
-## Progetto Overview
-**go_spin** è un'applicazione Go per gestire container Docker con automazione schedulata. Include una Web UI SPA (Alpine.js) per gestione visuale.
+
+## Project Overview
+**go_spin** is a Go application for scheduled management of Docker containers. It includes a SPA Web UI (Alpine.js) for visual management.
 
 ## Pattern Architetturali Chiave
 
@@ -29,6 +30,10 @@ Ogni modulo espone interfacce minimali:
 4. Goroutine file-watching per aggiornamenti esterni
 5. Goroutine persistence scheduler per salvataggi periodici
 
+air -c .air.toml              # Linux/macOS
+air -c .air_win.toml          # Windows
+go test ./...
+
 ## Build & Development
 
 ### Build
@@ -49,46 +54,54 @@ go test ./...
 ```
 
 ### Pre-commit Checklist
-- `go vet ./...` - sempre prima di commit
-- `go fmt ./...` - formattazione standard
+- `go vet ./...` - always before commit
+- `go fmt ./...` - standard formatting
 - `golangci-lint run` - linting
-- `go mod tidy` - dipendenze pulite
-- `go test ./...` - tests passano
+- `go mod tidy` - clean dependencies
+- `go test ./...` - all tests must pass
 
-## Configurazione
+## Configuration
 - **File**: `config/config.yaml` (Viper + dotenv)
 - **Env prefix**: `GO_SPIN_`
-- **Percorso config**: via `GO_SPIN_CONFIG_PATH` (default: `./config`)
-- **Directory auto-create**: se `data.file_path` non esiste, viene creata all'avvio
+- **Config path**: via `GO_SPIN_CONFIG_PATH` (default: `./config`)
+- **Directory auto-create**: if `data.file_path` does not exist, it is created at startup
 
-### Variabili importanti
+### Important variables
 - `server.port`, `data.file_path`, `data.persist_interval_secs`
 - `misc.scheduling_enabled`, `misc.scheduling_poll_interval_secs`
-- `misc.runtime_type` ("docker" o "memory")
+- `misc.runtime_type` ("docker" or "memory")
 - `misc.cors_allowed_origins`
 
-## Struttura Dati Principale
+## Main Data Structure
 ```
 DataDocument
 ├── Metadata (lastUpdate: int64 - unix ms)
 ├── Containers (name, friendly_name, url, running, active)
-├── Order (ordinamento containers)
-├── Groups (raggruppamenti)
-└── Schedules (timer start/stop)
+├── Order (container ordering)
+├── Groups (grouping)
+└── Schedules (start/stop timers)
 ```
 
-## API REST Endpoints
-| Metodo | Endpoint | Uso |
-|--------|----------|-----|
+
+## REST API Endpoints
+| Method | Endpoint | Usage |
+|--------|----------|-------|
 | GET/POST | `/container*` | CRUD containers |
-| GET/POST | `/group*` | CRUD gruppi |
+| GET/POST | `/group*` | CRUD groups |
 | GET/POST | `/schedule*` | CRUD schedules |
-| POST | `/runtime/:name/{start\|stop}` | Comandi runtime |
+| POST | `/runtime/:name/{start\|stop}` | Runtime commands |
+| GET | `/runtime/:name/waiting` | HTML waiting/redirect page for container or group |
 | GET | `/ui` | Web UI SPA |
 
+### Details for /runtime/:name/waiting endpoint
+- Returns an HTML page (spinner + JS redirect)
+- Replaces placeholders `{{CONTAINER_NAME}}` and `{{REDIRECT_URL}}` in the template
+- If the container/group is not running, it is started in background
+- 404 if not found, 403 if not active, 200 if ok
+
 ## Runtime Implementations
-- **DockerRuntime**: Usa Moby client, comunica con Docker daemon
-- **MemoryRuntime**: Mock per testing senza Docker
+- **DockerRuntime**: Uses Moby client, communicates with Docker daemon
+- **MemoryRuntime**: Mock for testing without Docker
 - **Factory**: `runtime.NewRuntimeFromConfig(runtimeType, doc)`
 
 ## Web UI (Alpine.js SPA)
