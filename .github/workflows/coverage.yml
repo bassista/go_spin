@@ -1,0 +1,79 @@
+name: Go Coverage Report
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run tests with coverage
+        run: |
+          mkdir -p coverage
+          go test ./... -coverprofile=coverage/coverage.out -covermode=atomic
+          go tool cover -func=coverage/coverage.out > coverage/coverage.txt
+
+      - name: Generate coverage chart
+        run: |
+          pip install matplotlib
+          python3 <<'EOF'
+import matplotlib.pyplot as plt
+
+data, labels = [], []
+
+with open("coverage/coverage.txt") as f:
+    for line in f:
+        if "%" in line and not line.startswith("total:"):
+            parts = line.split()
+            labels.append(parts[0])
+            data.append(float(parts[-1].replace("%","")))
+
+plt.figure(figsize=(10,6))
+plt.barh(labels, data, color="#4C9AFF")
+plt.xlabel("Coverage %")
+plt.title("Go Package Coverage")
+plt.tight_layout()
+plt.savefig("coverage/coverage.png")
+EOF
+
+      - name: Extract total coverage for badge
+        id: cov
+        run: |
+          total=$(grep -E "^total:" coverage/coverage.txt | awk '{print $3}' | sed 's/%//')
+          echo "percentage=$total" >> $GITHUB_OUTPUT
+
+      - name: Generate coverage badge
+        run: |
+          mkdir -p public
+          pct=${{ steps.cov.outputs.percentage }}
+          color="red"
+          if (( $(echo "$pct > 90" | bc -l) )); then color="brightgreen"; fi
+          if (( $(echo "$pct > 75" | bc -l) )); then color="green"; fi
+          if (( $(echo "$pct > 60" | bc -l) )); then color="yellow"; fi
+          echo "<img src=\"https://img.shields.io/badge/Coverage-$pct%25-$color\"/>" > public/badge.html
+
+      - name: Copy coverage files to public/
+        run: |
+          cp coverage/coverage.txt public/
+          cp coverage/coverage.png public/
+
+      - name: Generate index.html
+        run: |
+          python3 <<'EOF'
+import base64
+
