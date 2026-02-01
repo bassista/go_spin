@@ -27,7 +27,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           mkdir -p coverage
-          go test ./... -coverprofile=coverage/coverage.out -covermode=atomic
+          go test ./... -coverprofile=coverage/coverage.out -covermode=set
           go tool cover -func=coverage/coverage.out > coverage/coverage.txt
 
       - name: Extract total coverage
