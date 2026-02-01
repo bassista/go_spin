@@ -195,6 +195,7 @@ func TestJSONRepository_Save_ValidationError(t *testing.T) {
 
 // MockCacheStore implements CacheStore for testing
 type MockCacheStore struct {
+	mu         sync.RWMutex
 	lastUpdate int64
 	dirty      bool
 	doc        DataDocument
@@ -202,22 +203,36 @@ type MockCacheStore struct {
 }
 
 func (m *MockCacheStore) GetLastUpdate() int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.lastUpdate
 }
 
 func (m *MockCacheStore) IsDirty() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.dirty
 }
 
 func (m *MockCacheStore) Snapshot() (DataDocument, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.doc, nil
 }
 
 func (m *MockCacheStore) Replace(doc DataDocument) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.doc = doc
 	m.lastUpdate = doc.Metadata.LastUpdate
 	m.replaced = true
 	return nil
+}
+
+func (m *MockCacheStore) IsReplaced() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.replaced
 }
 
 func TestJSONRepository_MakeWatcherCallback_ReloadsWhenDiskNewer(t *testing.T) {
@@ -243,7 +258,7 @@ func TestJSONRepository_MakeWatcherCallback_ReloadsWhenDiskNewer(t *testing.T) {
 	callback := jsonRepo.MakeWatcherCallback(cache)
 	callback()
 
-	if !cache.replaced {
+	if !cache.IsReplaced() {
 		t.Error("expected cache to be replaced when disk is newer")
 	}
 }
@@ -271,7 +286,7 @@ func TestJSONRepository_MakeWatcherCallback_SkipsWhenDiskOlder(t *testing.T) {
 	callback := jsonRepo.MakeWatcherCallback(cache)
 	callback()
 
-	if cache.replaced {
+	if cache.IsReplaced() {
 		t.Error("expected cache NOT to be replaced when disk is older")
 	}
 }
@@ -299,7 +314,7 @@ func TestJSONRepository_MakeWatcherCallback_SkipsWhenDirty(t *testing.T) {
 	callback := jsonRepo.MakeWatcherCallback(cache)
 	callback()
 
-	if cache.replaced {
+	if cache.IsReplaced() {
 		t.Error("expected cache NOT to be replaced when dirty")
 	}
 }
@@ -327,7 +342,7 @@ func TestJSONRepository_MakeWatcherCallback_SkipsWhenSameContent(t *testing.T) {
 	callback := jsonRepo.MakeWatcherCallback(cache)
 	callback()
 
-	if cache.replaced {
+	if cache.IsReplaced() {
 		t.Error("expected cache NOT to be replaced when content is same")
 	}
 }
@@ -625,7 +640,7 @@ func TestJSONRepository_StartWatcher_FileChange(t *testing.T) {
 	// Wait for debounce + processing
 	time.Sleep(400 * time.Millisecond)
 
-	if !cache.replaced {
+	if !cache.IsReplaced() {
 		t.Error("expected cache to be replaced after file change")
 	}
 
@@ -649,7 +664,7 @@ func TestJSONRepository_MakeWatcherCallback_LoadError(t *testing.T) {
 	// Should not panic, just log error
 	callback()
 
-	if cache.replaced {
+	if cache.IsReplaced() {
 		t.Error("expected cache NOT to be replaced when load fails")
 	}
 }
@@ -684,7 +699,7 @@ func TestJSONRepository_MakeWatcherCallback_DifferentContentSameTimestamp(t *tes
 	callback := jsonRepo.MakeWatcherCallback(cache)
 	callback()
 
-	if !cache.replaced {
+	if !cache.IsReplaced() {
 		t.Error("expected cache to be replaced when content differs")
 	}
 }
@@ -867,7 +882,7 @@ func TestJSONRepository_StartWatcher_RemoveEvent(t *testing.T) {
 	// Wait for debounce + processing
 	time.Sleep(400 * time.Millisecond)
 
-	if !cache.replaced {
+	if !cache.IsReplaced() {
 		t.Error("expected cache to be replaced after file recreated")
 	}
 
@@ -921,7 +936,7 @@ func TestJSONRepository_StartWatcher_IgnoresOtherFiles(t *testing.T) {
 	// Wait to ensure no spurious reload
 	time.Sleep(400 * time.Millisecond)
 
-	if cache.replaced {
+	if cache.IsReplaced() {
 		t.Error("expected cache NOT to be replaced when other file changes")
 	}
 
@@ -981,8 +996,8 @@ func TestJSONRepository_StartWatcher_DebounceMultipleEvents(t *testing.T) {
 	time.Sleep(400 * time.Millisecond)
 
 	// Should have been called only once due to debouncing
-	if replaceCount > 2 { // Allow some tolerance
-		t.Errorf("expected debouncing to reduce reload count, got %d replaces", replaceCount)
+	if cache.GetReplaceCount() > 2 { // Allow some tolerance
+		t.Errorf("expected debouncing to reduce reload count, got %d replaces", cache.GetReplaceCount())
 	}
 
 	cancel()
@@ -991,6 +1006,7 @@ func TestJSONRepository_StartWatcher_DebounceMultipleEvents(t *testing.T) {
 
 // MockCacheStoreCountingReplaces counts how many times Replace is called
 type MockCacheStoreCountingReplaces struct {
+	mu           sync.RWMutex
 	lastUpdate   int64
 	dirty        bool
 	doc          DataDocument
@@ -998,20 +1014,34 @@ type MockCacheStoreCountingReplaces struct {
 }
 
 func (m *MockCacheStoreCountingReplaces) GetLastUpdate() int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.lastUpdate
 }
 
 func (m *MockCacheStoreCountingReplaces) IsDirty() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.dirty
 }
 
 func (m *MockCacheStoreCountingReplaces) Snapshot() (DataDocument, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.doc, nil
 }
 
 func (m *MockCacheStoreCountingReplaces) Replace(doc DataDocument) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	*m.replaceCount++
 	m.doc = doc
 	m.lastUpdate = doc.Metadata.LastUpdate
 	return nil
+}
+
+func (m *MockCacheStoreCountingReplaces) GetReplaceCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return *m.replaceCount
 }
