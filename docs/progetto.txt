@@ -1,0 +1,127 @@
+# Agent Knowledge Base - go_spin
+
+## Progetto Overview
+**go_spin** è un'applicazione Go per gestire container Docker con automazione schedulata. Include una Web UI SPA (Alpine.js) per gestione visuale.
+
+## Pattern Architetturali Chiave
+
+### 1. Dirty-Tracking Pattern
+- La **cache in-memory** (`internal/cache/store.go`) mantiene una copia dei dati con flag `dirty`
+- **I controller HTTP NON persistono direttamente** - marcano solo la cache come dirty
+- Una goroutine schedulata (`cache.StartPersistenceScheduler`) salva periodicamente il JSON se dirty
+- **Vantaggi**: evita I/O bloccante sulle API, omogeneizza persistenza asincrona
+
+### 2. Interface-Driven Design
+Ogni modulo espone interfacce minimali:
+- `ContainerRuntime` - astrae Docker/Memory runtime
+- `Repository` - astrae persistenza
+- `AppStore` - interfaccia cache
+- Questo facilita **testing senza Docker** e **mocking**
+
+### 3. Optimistic Locking
+- `metadata.lastUpdate` (Unix ms in config.json) previene race condition su modifiche esterne
+- File-watching con `fsnotify` rileva modifiche esterne e ricarica automaticamente
+
+## Workflow di Caricamento Dati
+1. `JSONRepository.Load()` legge `config/data/config.json`
+2. Validazione della struttura (tags `validate:"required,url"`)
+3. Creazione `DataDocument` in cache
+4. Goroutine file-watching per aggiornamenti esterni
+5. Goroutine persistence scheduler per salvataggi periodici
+
+## Build & Development
+
+### Build
+```bash
+go build -o .build/main ./cmd/server/main.go
+./.build/main
+```
+
+### Hot-Reload (Air)
+```bash
+air -c .air.toml              # Linux/macOS
+air -c .air_win.toml          # Windows
+```
+
+### Test
+```bash
+go test ./...
+```
+
+### Pre-commit Checklist
+- `go vet ./...` - sempre prima di commit
+- `go fmt ./...` - formattazione standard
+- `golangci-lint run` - linting
+- `go mod tidy` - dipendenze pulite
+- `go test ./...` - tests passano
+
+## Configurazione
+- **File**: `config/config.yaml` (Viper + dotenv)
+- **Env prefix**: `GO_SPIN_`
+- **Percorso config**: via `GO_SPIN_CONFIG_PATH` (default: `./config`)
+- **Directory auto-create**: se `data.file_path` non esiste, viene creata all'avvio
+
+### Variabili importanti
+- `server.port`, `data.file_path`, `data.persist_interval_secs`
+- `misc.scheduling_enabled`, `misc.scheduling_poll_interval_secs`
+- `misc.runtime_type` ("docker" o "memory")
+- `misc.cors_allowed_origins`
+
+## Struttura Dati Principale
+```
+DataDocument
+├── Metadata (lastUpdate: int64 - unix ms)
+├── Containers (name, friendly_name, url, running, active)
+├── Order (ordinamento containers)
+├── Groups (raggruppamenti)
+└── Schedules (timer start/stop)
+```
+
+## API REST Endpoints
+| Metodo | Endpoint | Uso |
+|--------|----------|-----|
+| GET/POST | `/container*` | CRUD containers |
+| GET/POST | `/group*` | CRUD gruppi |
+| GET/POST | `/schedule*` | CRUD schedules |
+| POST | `/runtime/:name/{start\|stop}` | Comandi runtime |
+| GET | `/ui` | Web UI SPA |
+
+## Runtime Implementations
+- **DockerRuntime**: Usa Moby client, comunica con Docker daemon
+- **MemoryRuntime**: Mock per testing senza Docker
+- **Factory**: `runtime.NewRuntimeFromConfig(runtimeType, doc)`
+
+## Web UI (Alpine.js SPA)
+- Accessibile su `/ui`
+- File: `ui/index.html` + `ui/assets/app.js`
+- Tabs: Containers, Groups, Schedules
+- Stack: Alpine.js (reattività) + TailwindCSS (styling CDN) + fetch API JSON
+
+## CORS
+- Configurabile in `internal/api/middleware/cors.go`
+- Default: `*` (tutte le origini)
+- Controllato via `misc.cors_allowed_origins`
+
+## Gestione Errori & Logging
+- Errori custom in `cache/` (es. `ErrContainerNotFound`)
+- Sempre wrappare con `fmt.Errorf("context: %w", err)`
+- Logger per componenti: `[json-repo]`, `[persist]`, `[sched]`
+
+## Dipendenze Critiche
+- `gin-gonic/gin` - HTTP framework
+- `moby/moby/client` - Docker client
+- `spf13/viper` - Configurazione
+- `fsnotify/fsnotify` - File watching
+- `go-playground/validator` - Validazione struct
+- `enrichman/httpgrace` - Graceful shutdown
+
+## Testing Strategy
+- Interfacce permettono **mocking senza Docker**
+- MemoryRuntime per test in isolation
+- Controllare test file per pattern: `*_test.go` in ogni modulo
+
+## Scheduling
+- `PollingScheduler` in `internal/scheduler/` effettua polling periodico
+- Controllo abilitazione via `misc.scheduling_enabled`
+- Intervallo configurabile: `misc.scheduling_poll_interval_secs`
+- Timezone: `misc.scheduling_timezone` (default: "Local")

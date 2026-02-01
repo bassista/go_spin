@@ -2,12 +2,11 @@ package scheduler
 
 import (
 	"context"
-	"log"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/bassista/go_spin/internal/cache"
+	"github.com/bassista/go_spin/internal/logger"
 	"github.com/bassista/go_spin/internal/repository"
 	"github.com/bassista/go_spin/internal/runtime"
 )
@@ -31,7 +30,6 @@ type PollingScheduler struct {
 	runtime runtime.ContainerRuntime
 	poll    time.Duration
 	loc     *time.Location
-	logger  *log.Logger
 
 	mu    sync.Mutex
 	flags map[string]DayFlags
@@ -47,19 +45,19 @@ func NewPollingScheduler(store cache.ReadOnlyStore, rt runtime.ContainerRuntime,
 		runtime: rt,
 		poll:    poll,
 		loc:     loc,
-		logger:  log.New(os.Stdout, "[sched] ", log.LstdFlags),
 		flags:   map[string]DayFlags{},
 	}
 }
 
 func (s *PollingScheduler) Start(ctx context.Context) {
+	logger.WithComponent("sched").Debugf("starting polling scheduler with interval: %v, timezone: %s", s.poll, s.loc.String())
 	ticker := time.NewTicker(s.poll)
 	go func() {
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
-				s.logger.Println("scheduler stopped")
+				logger.WithComponent("sched").Info("scheduler stopped")
 				return
 			case <-ticker.C:
 				s.tick(ctx)
@@ -69,14 +67,16 @@ func (s *PollingScheduler) Start(ctx context.Context) {
 }
 
 func (s *PollingScheduler) tick(ctx context.Context) {
+	logger.WithComponent("sched").Debugf("polling scheduler tick started")
 	doc, err := s.store.Snapshot()
 	if err != nil {
-		s.logger.Printf("snapshot error: %v", err)
+		logger.WithComponent("sched").Errorf("snapshot error: %v", err)
 		return
 	}
 
 	now := time.Now().In(s.loc)
 	todayKey := dayKey(now)
+	logger.WithComponent("sched").Debugf("evaluating schedules for today: %s, current time: %s", todayKey, now.Format("15:04:05"))
 
 	// Build lookup maps for efficient access during schedule evaluation.
 	containersByName := map[string]repository.Container{}
@@ -107,11 +107,14 @@ func (s *PollingScheduler) tick(ctx context.Context) {
 		// Expand the schedule target into a list of container names (handles both "container" and "group" target types).
 		containerNames := expandScheduleTargets(sched, containersByName, groupsByName)
 		if len(containerNames) == 0 {
+			logger.WithComponent("sched").Debugf("schedule %s expanded to 0 containers", sched.ID)
 			continue
 		}
 
+		logger.WithComponent("sched").Tracef("schedule %s (target: %s) expanded to %d containers", sched.ID, sched.Target, len(containerNames))
 		for _, timer := range sched.Timers {
 			if timer.Active != nil && !*timer.Active {
+				logger.WithComponent("sched").Debugf("timer inactive for schedule %s", sched.ID)
 				continue
 			}
 			// Check if this timer is currently active (within its start/stop window, considering days and cross-midnight).
@@ -119,6 +122,7 @@ func (s *PollingScheduler) tick(ctx context.Context) {
 				continue
 			}
 
+			logger.WithComponent("sched").Debugf("timer %s-%s is active for schedule %s, marking %d containers as running", timer.StartTime, timer.StopTime, sched.ID, len(containerNames))
 			// For each container targeted by this schedule, mark it as desired running if the container itself is active.
 			for _, containerName := range containerNames {
 				c, ok := containersByName[containerName]
@@ -136,26 +140,37 @@ func (s *PollingScheduler) tick(ctx context.Context) {
 
 	// For each container, decide whether to start or stop based on desired state and day-key flags.
 	for containerName := range containersByName {
+		// Check for context cancellation to allow early exit during long iterations
+		select {
+		case <-ctx.Done():
+			logger.WithComponent("sched").Debugf("tick cancelled, exiting container loop")
+			return
+		default:
+		}
+
 		flags := s.getFlags(containerName)
 		shouldRun := desiredRunning[containerName]
+		logger.WithComponent("sched").Debugf("container %s: shouldRun=%v, startedToday=%v, stoppedToday=%v",
+			containerName, shouldRun, flags.StartedDayKey == todayKey, flags.StoppedDayKey == todayKey)
 		// If we already attempted to start this container today, skip to avoid repeated attempts.
 		// This enforces "at most one start per day" even if the container stops later.
 		if shouldRun {
 			if flags.StartedDayKey == todayKey {
+				logger.WithComponent("sched").Debugf("container %s already started today, skipping", containerName)
 				continue
 			}
 			// Check current runtime state.
 			running, err := s.runtime.IsRunning(ctx, containerName)
 			if err != nil {
-				s.logger.Printf("IsRunning(%s) error: %v", containerName, err)
+				logger.WithComponent("sched").Errorf("IsRunning(%s) error: %v", containerName, err)
 				continue
 			}
 			if !running {
 				if err := s.runtime.Start(ctx, containerName); err != nil {
-					s.logger.Printf("Start(%s) error: %v", containerName, err)
+					logger.WithComponent("sched").Errorf("Start(%s) error: %v", containerName, err)
 					continue
 				}
-				s.logger.Printf("started %s", containerName)
+				logger.WithComponent("sched").Infof("started %s", containerName)
 			}
 			// Mark that a start attempt was made today (even if it was already running).
 			flags.StartedDayKey = todayKey
@@ -167,29 +182,32 @@ func (s *PollingScheduler) tick(ctx context.Context) {
 		// Stop evaluation only happens if a start evaluation occurred today (to avoid premature stops).
 		if flags.StartedDayKey != todayKey {
 			// Stop action is only evaluated after a start evaluation has happened today.
+			logger.WithComponent("sched").Tracef("container %s not started today, skipping stop evaluation", containerName)
 			continue
 		}
 		// If we already attempted to stop this container today, skip.
 		if flags.StoppedDayKey == todayKey {
+			logger.WithComponent("sched").Debugf("container %s already stopped today, skipping", containerName)
 			continue
 		}
 
 		running, err := s.runtime.IsRunning(ctx, containerName)
 		if err != nil {
-			s.logger.Printf("IsRunning(%s) error: %v", containerName, err)
+			logger.WithComponent("sched").Errorf("IsRunning(%s) error: %v", containerName, err)
 			continue
 		}
 		if running {
 			if err := s.runtime.Stop(ctx, containerName); err != nil {
-				s.logger.Printf("Stop(%s) error: %v", containerName, err)
+				logger.WithComponent("sched").Errorf("Stop(%s) error: %v", containerName, err)
 				continue
 			}
-			s.logger.Printf("stopped %s", containerName)
+			logger.WithComponent("sched").Infof("stopped %s", containerName)
 		}
 		// Mark that a stop attempt was made today (even if it was already stopped).
 		flags.StoppedDayKey = todayKey
 		s.setFlags(containerName, flags)
 	}
+	logger.WithComponent("sched").Debugf("polling scheduler tick completed")
 }
 
 func (s *PollingScheduler) getFlags(containerName string) DayFlags {

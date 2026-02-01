@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/bassista/go_spin/internal/logger"
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-playground/validator/v10"
 )
@@ -29,7 +29,6 @@ type JSONRepository struct {
 	dir       string
 	base      string
 	validator *validator.Validate
-	logger    *log.Logger
 	mu        sync.Mutex
 }
 
@@ -46,16 +45,37 @@ func NewJSONRepository(path string) (Repository, error) {
 		dir = "."
 	}
 
-	logger := log.New(os.Stdout, "[json-repo] ", log.LstdFlags)
 	v := validator.New()
-	return &JSONRepository{path: path, dir: dir, base: base, validator: v, logger: logger}, nil
+	return &JSONRepository{path: path, dir: dir, base: base, validator: v}, nil
 }
 
 // Load reads the JSON file, parses and validates it.
-func (r *JSONRepository) Load() (*DataDocument, error) {
+// It respects context cancellation before performing I/O operations.
+func (r *JSONRepository) Load(ctx context.Context) (*DataDocument, error) {
+	logger.WithComponent("json-repo").Debugf("loading data from: %s", r.path)
+
+	// Check for context cancellation before acquiring lock
+	if err := ctx.Err(); err != nil {
+		logger.WithComponent("json-repo").Debugf("load cancelled: %v", err)
+		return nil, fmt.Errorf("load cancelled: %w", err)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.loadUnlocked()
+
+	// Check again after acquiring lock
+	if err := ctx.Err(); err != nil {
+		logger.WithComponent("json-repo").Debugf("load cancelled: %v", err)
+		return nil, fmt.Errorf("load cancelled: %w", err)
+	}
+
+	doc, err := r.loadUnlocked()
+	if err != nil {
+		logger.WithComponent("json-repo").Debugf("load failed: %v", err)
+		return nil, err
+	}
+	logger.WithComponent("json-repo").Debugf("loaded data successfully, lastUpdate: %d, containers: %d, groups: %d, schedules: %d", doc.Metadata.LastUpdate, len(doc.Containers), len(doc.Groups), len(doc.Schedules))
+	return doc, nil
 }
 
 // loadUnlocked reads the JSON file without acquiring the lock (caller must hold it).
@@ -84,19 +104,48 @@ func (r *JSONRepository) loadUnlocked() (*DataDocument, error) {
 }
 
 // Save validates and writes the document atomically to disk.
-func (r *JSONRepository) Save(doc *DataDocument) error {
+// It respects context cancellation before performing I/O operations.
+func (r *JSONRepository) Save(ctx context.Context, doc *DataDocument) error {
 	if doc == nil {
+		logger.WithComponent("json-repo").Debugf("save failed: document is nil")
 		return errors.New("document is nil")
 	}
+
+	// Check for context cancellation before validation
+	if err := ctx.Err(); err != nil {
+		logger.WithComponent("json-repo").Debugf("save cancelled: %v", err)
+		return fmt.Errorf("save cancelled: %w", err)
+	}
+
+	logger.WithComponent("json-repo").Debugf("saving data to: %s (lastUpdate: %d)", r.path, doc.Metadata.LastUpdate)
 	if r.validator != nil {
 		if err := r.validator.Struct(doc); err != nil {
+			logger.WithComponent("json-repo").Debugf("save failed: %v", err)
 			return fmt.Errorf("validate before save: %w", err)
 		}
 	}
 
+	// Check for context cancellation before acquiring lock
+	if err := ctx.Err(); err != nil {
+		logger.WithComponent("json-repo").Debugf("save cancelled: %v", err)
+		return fmt.Errorf("save cancelled: %w", err)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.saveUnlocked(doc)
+
+	// Check again after acquiring lock
+	if err := ctx.Err(); err != nil {
+		logger.WithComponent("json-repo").Debugf("save cancelled: %v", err)
+		return fmt.Errorf("save cancelled: %w", err)
+	}
+
+	if err := r.saveUnlocked(doc); err != nil {
+		logger.WithComponent("json-repo").Debugf("save failed: %v", err)
+		return err
+	}
+	logger.WithComponent("json-repo").Debugf("data saved successfully")
+	return nil
 }
 
 // saveUnlocked writes the document without acquiring the lock (caller must hold it).
@@ -140,6 +189,7 @@ func (r *JSONRepository) saveUnlocked(doc *DataDocument) error {
 // debounced to avoid double reloads on write+chmod/rename cycles. The caller owns the
 // provided context: cancel it to stop the goroutine and close the watcher cleanly.
 func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore) error {
+	logger.WithComponent("json-repo").Debugf("starting file watcher for directory: %s", r.dir)
 	onChange := r.MakeWatcherCallback(cacheStore)
 	if onChange == nil {
 		return errors.New("onChange callback is required")
@@ -147,13 +197,17 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
+		logger.WithComponent("json-repo").Debugf("failed to create watcher: %v", err)
 		return fmt.Errorf("create watcher: %w", err)
 	}
 
 	if err := watcher.Add(r.dir); err != nil {
 		watcher.Close()
+		logger.WithComponent("json-repo").Debugf("failed to watch directory: %v", err)
 		return fmt.Errorf("watch dir: %w", err)
 	}
+
+	logger.WithComponent("json-repo").Debugf("file watcher started for: %s", r.dir)
 
 	// Run watcher loop in the background; it exits when ctx is canceled or channels close.
 	go func() {
@@ -177,6 +231,7 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore
 		for {
 			select {
 			case <-ctx.Done():
+				logger.WithComponent("json-repo").Debugf("file watcher shutting down")
 				return
 			case event, ok := <-watcher.Events:
 				if !ok {
@@ -185,6 +240,7 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore
 				if filepath.Base(event.Name) != r.base {
 					continue
 				}
+				logger.WithComponent("json-repo").Debugf("file event detected: %s (op: %v)", event.Name, event.Op)
 				// Writes/Create/Chmod cover normal edits and atomic replace; trigger reload.
 				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Chmod) != 0 {
 					schedule()
@@ -198,7 +254,7 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore
 				if !ok {
 					return
 				}
-				r.logger.Printf("watcher error: %v", err)
+				logger.WithComponent("json-repo").Errorf("watcher error: %v", err)
 			}
 		}
 	}()
@@ -207,11 +263,12 @@ func (r *JSONRepository) StartWatcher(ctx context.Context, cacheStore CacheStore
 }
 
 // MakeWatcherCallback returns a callback for file watcher that reloads cache from disk if needed.
+// The callback uses context.Background() for the Load operation as it runs asynchronously from a timer.
 func (r *JSONRepository) MakeWatcherCallback(cacheStore CacheStore) func() {
 	return func() {
-		diskDoc, loadErr := r.Load()
+		diskDoc, loadErr := r.Load(context.Background())
 		if loadErr != nil {
-			r.logger.Printf("watch reload failed: %v", loadErr)
+			logger.WithComponent("json-repo").Errorf("watch reload failed: %v", loadErr)
 			return
 		}
 		cacheLastUpdate := cacheStore.GetLastUpdate()
@@ -219,12 +276,12 @@ func (r *JSONRepository) MakeWatcherCallback(cacheStore CacheStore) func() {
 
 		// If disk is not newer, skip reload
 		if diskLastUpdate < cacheLastUpdate {
-			r.logger.Println("disk version is not newer than cache: diskLastUpdate =", diskLastUpdate, ", cacheLastUpdate =", cacheLastUpdate)
+			logger.WithComponent("json-repo").Infof("disk version is not newer than cache: diskLastUpdate = %d, cacheLastUpdate = %d", diskLastUpdate, cacheLastUpdate)
 			return
 		}
 
 		if cacheStore.IsDirty() {
-			r.logger.Println("Warning: disk data is newer but cache is dirty; skipping reload")
+			logger.WithComponent("json-repo").Warn("disk data is newer but cache is dirty; skipping reload")
 			// the cache content will be written to file soon anyway
 			return
 		}
@@ -234,17 +291,17 @@ func (r *JSONRepository) MakeWatcherCallback(cacheStore CacheStore) func() {
 			// check if disk content is really the same as cache content
 			snapshot, err := cacheStore.Snapshot()
 			if err != nil {
-				r.logger.Printf("cache reload error: failed to get snapshot: %v", err)
+				logger.WithComponent("json-repo").Errorf("cache reload error: failed to get snapshot: %v", err)
 				return
 			}
 			isDiskSameAsCache = AreDataDocumentsEqual(&snapshot, diskDoc)
 		}
 		if !isDiskSameAsCache {
 			if err := cacheStore.Replace(*diskDoc); err != nil {
-				r.logger.Printf("cache reload error: %v", err)
+				logger.WithComponent("json-repo").Errorf("cache reload error: %v", err)
 				return
 			}
-			r.logger.Println("cache reloaded from newer disk version")
+			logger.WithComponent("json-repo").Info("cache reloaded from newer disk version")
 		}
 	}
 }

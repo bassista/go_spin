@@ -2,13 +2,13 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/bassista/go_spin/internal/logger"
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
@@ -36,20 +36,23 @@ type DataConfig struct {
 }
 
 type MiscConfig struct {
-	GinMode            string
-	SchedulingEnabled  bool
-	SchedulingPoll     time.Duration
-	SchedulingTZ       string
-	RuntimeType        string // "docker" o "memory"
-	CORSAllowedOrigins string // CORS allowed origins, default "*"
+	GinMode              string
+	SchedulingEnabled    bool
+	SchedulingPoll       time.Duration
+	RequestTimeoutMillis time.Duration
+	SchedulingTZ         string
+	RuntimeType          string // "docker" o "memory"
+	CORSAllowedOrigins   string // CORS allowed origins, default "*"
+	LogLevel             string // "debug", "info", "warn", "error", default "info"
 }
 
 // LoadConfig loads configuration from file, env vars and validates required fields.
 // Returns error if validation fails (fail-fast).
 func LoadConfig() (*Config, error) {
+	logger.WithComponent("config").Debugf("loading configuration, config path env var: %s_CONFIG_PATH", ENV_PREFIX)
 	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found (that's okay in production)")
+		logger.WithComponent("config").Info("No .env file found (that's okay in production)")
 	}
 
 	confPath := getEnvOrDefault(ENV_PREFIX+"_CONFIG_PATH", "./config")
@@ -67,10 +70,12 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("data.persist_interval_secs", 5)
 	viper.SetDefault("misc.gin_mode", "release")
 	viper.SetDefault("misc.scheduling_enabled", true)
+	viper.SetDefault("misc.request_timeout_millis", 1000)
 	viper.SetDefault("misc.scheduling_poll_interval_secs", 30)
 	viper.SetDefault("misc.scheduling_timezone", "Local")
 	viper.SetDefault("misc.runtime_type", "docker")
 	viper.SetDefault("misc.cors_allowed_origins", "*")
+	viper.SetDefault("misc.log_level", "info")
 
 	// Environment variables automatically override config file values
 	viper.AutomaticEnv()
@@ -79,14 +84,14 @@ func LoadConfig() (*Config, error) {
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Println("No config file found, using defaults and env vars")
+			logger.WithComponent("config").Info("No config file found, using defaults and env vars")
 		} else {
 			return nil, fmt.Errorf("config file error: %w", err)
 		}
 	}
 
 	fileStorePath := viper.GetString("data.file_path")
-	log.Printf("Using data file: %s", fileStorePath)
+	logger.WithComponent("config").Infof("Using data file: %s", fileStorePath)
 
 	// Ensure the directory for the data file exists
 	dataDir := filepath.Dir(fileStorePath)
@@ -113,14 +118,19 @@ func LoadConfig() (*Config, error) {
 			PersistInterval: time.Duration(viper.GetInt("data.persist_interval_secs")) * time.Second,
 		},
 		Misc: MiscConfig{
-			GinMode:            viper.GetString("misc.gin_mode"),
-			SchedulingEnabled:  viper.GetBool("misc.scheduling_enabled"),
-			SchedulingPoll:     time.Duration(viper.GetInt("misc.scheduling_poll_interval_secs")) * time.Second,
-			SchedulingTZ:       viper.GetString("misc.scheduling_timezone"),
-			RuntimeType:        viper.GetString("misc.runtime_type"),
-			CORSAllowedOrigins: viper.GetString("misc.cors_allowed_origins"),
+			GinMode:              viper.GetString("misc.gin_mode"),
+			SchedulingEnabled:    viper.GetBool("misc.scheduling_enabled"),
+			SchedulingPoll:       time.Duration(viper.GetInt("misc.scheduling_poll_interval_secs")) * time.Second,
+			RequestTimeoutMillis: time.Duration(viper.GetInt("misc.request_timeout_millis")) * time.Millisecond,
+			SchedulingTZ:         viper.GetString("misc.scheduling_timezone"),
+			RuntimeType:          viper.GetString("misc.runtime_type"),
+			CORSAllowedOrigins:   viper.GetString("misc.cors_allowed_origins"),
+			LogLevel:             viper.GetString("misc.log_level"),
 		},
 	}
+
+	logger.WithComponent("config").Debugf("configuration loaded: port=%d, gin_mode=%s, runtime_type=%s, scheduling_enabled=%v, scheduling_tz=%s",
+		cfg.Server.Port, cfg.Misc.GinMode, cfg.Misc.RuntimeType, cfg.Misc.SchedulingEnabled, cfg.Misc.SchedulingTZ)
 
 	// Fail-fast validation
 	if err := cfg.validate(); err != nil {
@@ -156,6 +166,9 @@ func (c *Config) validate() error {
 	}
 	if c.Misc.SchedulingPoll <= 0 {
 		return fmt.Errorf("misc.scheduling_poll_interval_secs must be positive")
+	}
+	if c.Misc.RequestTimeoutMillis <= 0 {
+		return fmt.Errorf("misc.request_timeout_millis must be positive")
 	}
 	if c.Misc.SchedulingTZ != "" && c.Misc.SchedulingTZ != "Local" {
 		if _, err := time.LoadLocation(c.Misc.SchedulingTZ); err != nil {

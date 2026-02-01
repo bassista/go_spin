@@ -18,7 +18,7 @@ func TestRequestTimeout_ZeroDuration(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
-	
+
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {

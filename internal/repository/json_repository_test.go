@@ -1,9 +1,11 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -62,7 +64,7 @@ func TestJSONRepository_LoadAndSave(t *testing.T) {
 	}
 
 	// Test Load
-	loaded, err := repo.Load()
+	loaded, err := repo.Load(context.Background())
 	if err != nil {
 		t.Fatalf("failed to load: %v", err)
 	}
@@ -78,7 +80,7 @@ func TestJSONRepository_LoadAndSave(t *testing.T) {
 
 func TestJSONRepository_Load_FileNotFound(t *testing.T) {
 	repo, _ := NewJSONRepository("/nonexistent/path/config.json")
-	_, err := repo.Load()
+	_, err := repo.Load(context.Background())
 	if err == nil {
 		t.Error("expected error for nonexistent file")
 	}
@@ -94,7 +96,7 @@ func TestJSONRepository_Load_InvalidJSON(t *testing.T) {
 	}
 
 	repo, _ := NewJSONRepository(configPath)
-	_, err := repo.Load()
+	_, err := repo.Load(context.Background())
 	if err == nil {
 		t.Error("expected error for invalid JSON")
 	}
@@ -117,7 +119,7 @@ func TestJSONRepository_Load_ValidationError(t *testing.T) {
 	}
 
 	repo, _ := NewJSONRepository(configPath)
-	_, err := repo.Load()
+	_, err := repo.Load(context.Background())
 	if err == nil {
 		t.Error("expected validation error")
 	}
@@ -138,7 +140,7 @@ func TestJSONRepository_Save_Success(t *testing.T) {
 	}
 
 	doc := createTestDataDocument()
-	err = repo.Save(&doc)
+	err = repo.Save(context.Background(), &doc)
 	if err != nil {
 		t.Fatalf("failed to save: %v", err)
 	}
@@ -164,7 +166,7 @@ func TestJSONRepository_Save_NilDocument(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	repo, _ := NewJSONRepository(configPath)
-	err := repo.Save(nil)
+	err := repo.Save(context.Background(), nil)
 	if err == nil {
 		t.Error("expected error for nil document")
 	}
@@ -183,7 +185,7 @@ func TestJSONRepository_Save_ValidationError(t *testing.T) {
 		},
 	}
 
-	err := repo.Save(&doc)
+	err := repo.Save(context.Background(), &doc)
 	if err == nil {
 		t.Error("expected validation error")
 	}
@@ -325,5 +327,210 @@ func TestJSONRepository_MakeWatcherCallback_SkipsWhenSameContent(t *testing.T) {
 
 	if cache.replaced {
 		t.Error("expected cache NOT to be replaced when content is same")
+	}
+}
+
+// ==================== Concurrency Tests ====================
+
+// TestJSONRepository_ConcurrentLoadSave verifies that concurrent Load and Save
+// operations are thread-safe and don't cause data corruption.
+func TestJSONRepository_ConcurrentLoadSave(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	// Create initial file
+	doc := createTestDataDocument()
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	ctx := context.Background()
+	const numOperations = 50
+
+	// Concurrent loads
+	for i := 0; i < numOperations; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := repo.Load(ctx)
+			if err != nil {
+				// Load errors are acceptable in concurrent scenario
+				t.Logf("concurrent load error (may be expected): %v", err)
+			}
+		}()
+	}
+
+	// Concurrent saves
+	for i := 0; i < numOperations; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			saveDoc := createTestDataDocument()
+			saveDoc.Metadata.LastUpdate = int64(2000 + idx)
+			err := repo.Save(ctx, &saveDoc)
+			if err != nil {
+				// Save errors are acceptable in concurrent scenario
+				t.Logf("concurrent save error (may be expected): %v", err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Final load should succeed and return valid data
+	finalDoc, err := repo.Load(ctx)
+	if err != nil {
+		t.Fatalf("final load failed: %v", err)
+	}
+	if finalDoc == nil {
+		t.Fatal("expected non-nil document")
+	}
+}
+
+// TestJSONRepository_ConcurrentLoads verifies that multiple concurrent Load
+// operations don't interfere with each other.
+func TestJSONRepository_ConcurrentLoads(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := createTestDataDocument()
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	ctx := context.Background()
+	const numReaders = 100
+
+	results := make([]*DataDocument, numReaders)
+	errors := make([]error, numReaders)
+
+	for i := 0; i < numReaders; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			results[idx], errors[idx] = repo.Load(ctx)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// All loads should succeed
+	for i := 0; i < numReaders; i++ {
+		if errors[i] != nil {
+			t.Errorf("load %d failed: %v", i, errors[i])
+		}
+		if results[i] == nil {
+			t.Errorf("load %d returned nil document", i)
+		}
+	}
+}
+
+// TestJSONRepository_ConcurrentSaves verifies that multiple concurrent Save
+// operations don't cause file corruption.
+func TestJSONRepository_ConcurrentSaves(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	// Create initial file
+	doc := createTestDataDocument()
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	ctx := context.Background()
+	const numWriters = 30
+
+	for i := 0; i < numWriters; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			saveDoc := createTestDataDocument()
+			saveDoc.Metadata.LastUpdate = int64(3000 + idx)
+			_ = repo.Save(ctx, &saveDoc)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Final load should return valid JSON
+	finalDoc, err := repo.Load(ctx)
+	if err != nil {
+		t.Fatalf("final load after concurrent saves failed: %v", err)
+	}
+	if finalDoc == nil {
+		t.Fatal("expected non-nil document")
+	}
+	if len(finalDoc.Containers) != 1 {
+		t.Errorf("expected 1 container, got %d", len(finalDoc.Containers))
+	}
+}
+
+// TestJSONRepository_LoadWithContextCancellation verifies that Load respects
+// context cancellation.
+func TestJSONRepository_LoadWithContextCancellation(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	doc := createTestDataDocument()
+	data, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Create already cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = repo.Load(ctx)
+	if err == nil {
+		t.Error("expected error for cancelled context")
+	}
+}
+
+// TestJSONRepository_SaveWithContextCancellation verifies that Save respects
+// context cancellation.
+func TestJSONRepository_SaveWithContextCancellation(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	repo, err := NewJSONRepository(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Create already cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	doc := createTestDataDocument()
+	err = repo.Save(ctx, &doc)
+	if err == nil {
+		t.Error("expected error for cancelled context")
 	}
 }

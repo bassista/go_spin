@@ -18,11 +18,11 @@ type mockRepository struct {
 	doc            repository.DataDocument
 }
 
-func (m *mockRepository) Load() (*repository.DataDocument, error) {
+func (m *mockRepository) Load(ctx context.Context) (*repository.DataDocument, error) {
 	return &m.doc, nil
 }
 
-func (m *mockRepository) Save(doc *repository.DataDocument) error {
+func (m *mockRepository) Save(ctx context.Context, doc *repository.DataDocument) error {
 	if m.saveErr != nil {
 		return m.saveErr
 	}

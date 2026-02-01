@@ -594,3 +594,178 @@ func TestExpandScheduleTargets_GroupWithEmptyContainerNames(t *testing.T) {
 		t.Error("expected empty container names to be filtered out")
 	}
 }
+
+// ==================== Concurrency Tests ====================
+
+// TestPollingScheduler_ConcurrentGetSetFlags verifies that concurrent access to
+// the flags map is thread-safe. This test should be run with -race flag.
+func TestPollingScheduler_ConcurrentGetSetFlags(t *testing.T) {
+	store := &MockStore{
+		doc: repository.DataDocument{
+			Containers: []repository.Container{
+				{Name: "c1", Active: boolPtr(true)},
+				{Name: "c2", Active: boolPtr(true)},
+				{Name: "c3", Active: boolPtr(true)},
+			},
+		},
+	}
+	rt := NewMockRuntime()
+	scheduler := NewPollingScheduler(store, rt, 30*time.Second, time.Local)
+
+	var wg sync.WaitGroup
+	const numGoroutines = 50
+
+	// Concurrent reads and writes to flags
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(2)
+		containerName := "c1"
+		if i%3 == 1 {
+			containerName = "c2"
+		} else if i%3 == 2 {
+			containerName = "c3"
+		}
+
+		// Concurrent getFlags
+		go func(name string) {
+			defer wg.Done()
+			_ = scheduler.getFlags(name)
+		}(containerName)
+
+		// Concurrent setFlags
+		go func(name string, idx int) {
+			defer wg.Done()
+			scheduler.setFlags(name, DayFlags{
+				StartedDayKey: "2026-02-01",
+				StoppedDayKey: "2026-02-01",
+			})
+		}(containerName, i)
+	}
+
+	wg.Wait()
+}
+
+// TestPollingScheduler_ConcurrentTick verifies that multiple tick executions
+// can run concurrently without race conditions. This simulates scenarios where
+// a tick takes longer than the poll interval.
+func TestPollingScheduler_ConcurrentTick(t *testing.T) {
+	store := &MockStore{
+		doc: repository.DataDocument{
+			Containers: []repository.Container{
+				{Name: "c1", Active: boolPtr(true)},
+				{Name: "c2", Active: boolPtr(true)},
+			},
+			Schedules: []repository.Schedule{
+				{
+					ID:         "s1",
+					Target:     "c1",
+					TargetType: "container",
+					Timers: []repository.Timer{
+						{
+							StartTime: "00:00",
+							StopTime:  "23:59",
+							Days:      []int{0, 1, 2, 3, 4, 5, 6},
+							Active:    boolPtr(true),
+						},
+					},
+				},
+			},
+		},
+	}
+	rt := NewMockRuntime()
+	scheduler := NewPollingScheduler(store, rt, 30*time.Second, time.Local)
+
+	var wg sync.WaitGroup
+	const numTicks = 20
+
+	ctx := context.Background()
+	for i := 0; i < numTicks; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			scheduler.tick(ctx)
+		}()
+	}
+
+	wg.Wait()
+}
+
+// TestPollingScheduler_StartWithContextCancellation verifies that the scheduler
+// properly handles context cancellation during concurrent operations.
+func TestPollingScheduler_StartWithContextCancellation(t *testing.T) {
+	store := &MockStore{
+		doc: repository.DataDocument{
+			Containers: []repository.Container{
+				{Name: "c1", Active: boolPtr(true)},
+			},
+			Schedules: []repository.Schedule{
+				{
+					ID:         "s1",
+					Target:     "c1",
+					TargetType: "container",
+					Timers: []repository.Timer{
+						{
+							StartTime: "00:00",
+							StopTime:  "23:59",
+							Days:      []int{0, 1, 2, 3, 4, 5, 6},
+							Active:    boolPtr(true),
+						},
+					},
+				},
+			},
+		},
+	}
+	rt := NewMockRuntime()
+	scheduler := NewPollingScheduler(store, rt, 10*time.Millisecond, time.Local)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start scheduler
+	scheduler.Start(ctx)
+
+	// Let it run a few ticks
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel while scheduler might be in the middle of tick
+	cancel()
+
+	// Give time for graceful shutdown
+	time.Sleep(30 * time.Millisecond)
+
+	// Scheduler should have stopped - no panics or race conditions
+}
+
+// TestPollingScheduler_ConcurrentStartMultipleTimes verifies that calling Start
+// multiple times concurrently does not cause issues (even though it creates
+// multiple goroutines - this tests for race conditions in initialization).
+func TestPollingScheduler_ConcurrentStartMultipleTimes(t *testing.T) {
+	store := &MockStore{
+		doc: repository.DataDocument{
+			Containers: []repository.Container{
+				{Name: "c1", Active: boolPtr(true)},
+			},
+		},
+	}
+	rt := NewMockRuntime()
+	scheduler := NewPollingScheduler(store, rt, 100*time.Millisecond, time.Local)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	// Start multiple times concurrently (not recommended in production, but should not panic)
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			scheduler.Start(ctx)
+		}()
+	}
+	wg.Wait()
+
+	// Let schedulers run briefly
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel all
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+}

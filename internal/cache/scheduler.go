@@ -2,60 +2,75 @@ package cache
 
 import (
 	"context"
-	"log"
-	"os"
 	"time"
 
+	"github.com/bassista/go_spin/internal/logger"
 	"github.com/bassista/go_spin/internal/repository"
 )
 
 // StartPersistenceScheduler runs a goroutine that periodically flushes dirty cache to disk.
 // On ctx.Done, it performs a final flush before returning.
+// Returns a channel that is closed when the scheduler has completed shutdown.
 func StartPersistenceScheduler(
 	ctx context.Context,
 	store PersistableStore,
 	repo repository.Saver,
 	interval time.Duration,
-) {
-	logger := log.New(os.Stdout, "[persist] ", log.LstdFlags)
+) <-chan struct{} {
+	done := make(chan struct{})
+	logger.WithComponent("persist").Debugf("starting persistence scheduler with interval: %v", interval)
 	ticker := time.NewTicker(interval)
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
+		logger.WithComponent("persist").Debugf("persistence scheduler running")
 		for {
 			select {
 			case <-ctx.Done():
-				// Final flush on shutdown
-				flushCache(store, repo, logger)
-				logger.Println("persistence scheduler stopped after final flush")
+				logger.WithComponent("persist").Debugf("persistence scheduler received context cancellation, performing final flush")
+				// Final flush on shutdown - use background context to ensure it completes
+				flushCache(context.Background(), store, repo)
+				logger.WithComponent("persist").Info("persistence scheduler stopped after final flush")
 				return
 			case <-ticker.C:
-				flushCache(store, repo, logger)
+				logger.WithComponent("persist").Tracef("persistence scheduler tick, checking if dirty")
+				flushCache(ctx, store, repo)
 			}
 		}
 	}()
+	return done
 }
 
 // flushCache persists the cache to disk if dirty, using optimistic locking.
-func flushCache(store PersistableStore, repo repository.Saver, logger *log.Logger) {
+// It respects context cancellation to allow graceful shutdown.
+func flushCache(ctx context.Context, store PersistableStore, repo repository.Saver) {
 	if !store.IsDirty() {
+		logger.WithComponent("persist").Tracef("cache is clean, skipping flush")
 		return
 	}
 
+	// Check for context cancellation before proceeding
+	if err := ctx.Err(); err != nil {
+		logger.WithComponent("persist").Debugf("flush cancelled: %v", err)
+		return
+	}
+
+	logger.WithComponent("persist").Debugf("cache is dirty, flushing to disk")
 	// Cache is dirty → persist
 	snapshot, err := store.Snapshot()
 	if err != nil {
-		logger.Printf("persist error: failed to get snapshot: %v", err)
+		logger.WithComponent("persist").Errorf("persist error: failed to get snapshot: %v", err)
 		return
 	}
 
 	snapshot.Metadata.LastUpdate = time.Now().UnixMilli()
 
-	if err := repo.Save(&snapshot); err != nil {
-		logger.Printf("persist error: failed to save: %v", err)
+	if err := repo.Save(ctx, &snapshot); err != nil {
+		logger.WithComponent("persist").Errorf("persist error: failed to save: %v", err)
 		return
 	}
 
 	store.ClearDirty()
 	store.SetLastUpdate(snapshot.Metadata.LastUpdate)
-	logger.Println("cache persisted to disk")
+	logger.WithComponent("persist").Info("cache persisted to disk")
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/bassista/go_spin/internal/logger"
 	"github.com/bassista/go_spin/internal/repository"
 )
 
@@ -84,6 +85,7 @@ func (s *Store) Replace(doc repository.DataDocument) error {
 
 // AddContainer upserts a container by name, updating order and returning the new snapshot.
 func (s *Store) AddContainer(container repository.Container) (repository.DataDocument, error) {
+	logger.WithComponent("cache").Debugf("adding/updating container: %s", container.Name)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -125,6 +127,7 @@ func (s *Store) AddContainer(container repository.Container) (repository.DataDoc
 
 // RemoveContainer deletes a container by name and removes it from the order list.
 func (s *Store) RemoveContainer(name string) (repository.DataDocument, error) {
+	logger.WithComponent("cache").Debugf("removing container: %s", name)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -158,6 +161,7 @@ func (s *Store) RemoveContainer(name string) (repository.DataDocument, error) {
 
 // AddGroup upserts a group by name, updating group order and returning the new snapshot.
 func (s *Store) AddGroup(group repository.Group) (repository.DataDocument, error) {
+	logger.WithComponent("cache").Debugf("adding/updating group: %s with %d containers", group.Name, len(group.Container))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -232,6 +236,7 @@ func (s *Store) RemoveGroup(name string) (repository.DataDocument, error) {
 
 // AddSchedule upserts a schedule by id and returns the new snapshot.
 func (s *Store) AddSchedule(schedule repository.Schedule) (repository.DataDocument, error) {
+	logger.WithComponent("cache").Debugf("adding/updating schedule: %s (target: %s, %d timers)", schedule.ID, schedule.Target, len(schedule.Timers))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -2,7 +2,6 @@ package route
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/bassista/go_spin/internal/api/middleware"
 	"github.com/bassista/go_spin/internal/app"
@@ -19,15 +18,15 @@ func SetupRoutes(r *gin.Engine, appCtx *app.App) {
 		})
 	})
 
+	// All Public APIs
 	publicRouter := r.Group("")
 
-	// All Public APIs
-	timeout := time.Duration(1) * time.Second
+	timeout := appCtx.Config.Misc.RequestTimeoutMillis
 
 	NewContainerRouter(timeout, publicRouter, appCtx.Cache)
 	NewGroupRouter(timeout, publicRouter, appCtx.Cache)
 	NewScheduleRouter(timeout, publicRouter, appCtx.Cache)
-	NewRuntimeRouter(timeout, publicRouter, appCtx.Runtime)
+	NewRuntimeRouter(timeout, publicRouter, appCtx.Runtime, appCtx.Cache)
 
 	// UI static files
 	NewUIRouter(r)

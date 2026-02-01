@@ -3,11 +3,11 @@ package app
 import (
 	"context"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/bassista/go_spin/internal/cache"
 	"github.com/bassista/go_spin/internal/config"
+	"github.com/bassista/go_spin/internal/logger"
 	"github.com/bassista/go_spin/internal/repository"
 	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/bassista/go_spin/internal/scheduler"
@@ -21,23 +21,32 @@ type App struct {
 	Cache   cache.AppStore
 	Runtime runtime.ContainerRuntime
 
-	BaseCtx context.Context
-	Cancel  context.CancelFunc
+	BaseCtx     context.Context
+	Cancel      context.CancelFunc
+	persistDone <-chan struct{} // segnala completamento persistence scheduler
 }
 
 func New(cfg *config.Config, repo repository.Repository, store cache.AppStore, rt runtime.ContainerRuntime) (*App, error) {
+	logger.WithComponent("app").Debugf("initializing app container")
+
 	if cfg == nil {
+		logger.WithComponent("app").Errorf("config is nil")
 		return nil, errors.New("config is nil")
 	}
 	if repo == nil {
+		logger.WithComponent("app").Errorf("repo is nil")
 		return nil, errors.New("repo is nil")
 	}
 	if store == nil {
+		logger.WithComponent("app").Errorf("cache store is nil")
 		return nil, errors.New("cache store is nil")
 	}
 	if rt == nil {
+		logger.WithComponent("app").Errorf("runtime is nil")
 		return nil, errors.New("runtime is nil")
 	}
+
+	logger.WithComponent("app").Debugf("all dependencies validated")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &App{
@@ -51,31 +60,50 @@ func New(cfg *config.Config, repo repository.Repository, store cache.AppStore, r
 }
 
 func (a *App) Shutdown() {
+	logger.WithComponent("app").Debugf("shutting down app container")
+
 	if a == nil || a.Cancel == nil {
+		logger.WithComponent("app").Debugf("app or cancel is nil, skipping shutdown")
 		return
 	}
 	a.Cancel()
+
+	// Attende il completamento del persistence scheduler
+	if a.persistDone != nil {
+		logger.WithComponent("app").Debugf("waiting for persistence scheduler to complete")
+		<-a.persistDone
+	}
+
+	logger.WithComponent("app").Debugf("app shutdown completed")
 }
 
 func (a *App) StartWatchers() {
+	logger.WithComponent("app").Debugf("starting watchers")
+
 	if err := a.Repo.StartWatcher(a.BaseCtx, a.Cache); err != nil {
-		log.Fatalf("cannot start config file watcher: %v", err)
+		logger.WithComponent("app").Fatalf("cannot start config file watcher: %v", err)
 	}
 
+	logger.WithComponent("app").Debugf("file watcher started")
+
 	// Start scheduled persistence goroutine
-	cache.StartPersistenceScheduler(a.BaseCtx, a.Cache, a.Repo, a.Config.Data.PersistInterval)
+	a.persistDone = cache.StartPersistenceScheduler(a.BaseCtx, a.Cache, a.Repo, a.Config.Data.PersistInterval)
+	logger.WithComponent("app").Debugf("persistence scheduler started")
 
 	if a.Config.Misc.SchedulingEnabled {
 		loc := time.Local
 		if a.Config.Misc.SchedulingTZ != "" && a.Config.Misc.SchedulingTZ != "Local" {
 			l, err := time.LoadLocation(a.Config.Misc.SchedulingTZ)
 			if err != nil {
-				log.Fatalf("invalid scheduling timezone: %v", err)
+				logger.WithComponent("app").Fatalf("invalid scheduling timezone: %v", err)
 			}
 			loc = l
 		}
 
+		logger.WithComponent("app").Debugf("starting polling scheduler with timezone: %v", loc)
 		s := scheduler.NewPollingScheduler(a.Cache, a.Runtime, a.Config.Misc.SchedulingPoll, loc)
 		s.Start(a.BaseCtx)
 	}
+
+	logger.WithComponent("app").Debugf("all watchers started successfully")
 }

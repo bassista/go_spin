@@ -5,74 +5,65 @@ import (
 	"net/http"
 
 	"github.com/bassista/go_spin/internal/cache"
+	"github.com/bassista/go_spin/internal/logger"
 	"github.com/bassista/go_spin/internal/repository"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 )
 
-// ScheduleController exposes schedule-related handlers.
+// ScheduleController handles schedule-related HTTP endpoints using the generic CRUD controller.
 type ScheduleController struct {
-	store     cache.ScheduleStore
-	validator *validator.Validate
+	crud *CrudController[repository.Schedule]
 }
 
-// NewScheduleController builds a ScheduleController with cache store.
+// NewScheduleController creates a new ScheduleController with the given cache store.
 func NewScheduleController(store cache.ScheduleStore) *ScheduleController {
 	v := validator.New()
-	return &ScheduleController{store: store, validator: v}
+	service := &ScheduleCrudService{Store: store}
+	validator := &ScheduleCrudValidator{validator: v}
+
+	return &ScheduleController{
+		crud: &CrudController[repository.Schedule]{
+			Service:   service,
+			Validator: validator,
+		},
+	}
 }
 
-// AllSchedules returns all schedules from cache.
+// AllSchedules handles GET /schedules - returns all schedules.
 func (sc *ScheduleController) AllSchedules(c *gin.Context) {
-	data, err := sc.store.Snapshot()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read cache"})
-		return
-	}
-	c.JSON(http.StatusOK, data.Schedules)
+	logger.WithComponent("schedule-controller").Debugf("GET /schedules handler called")
+	sc.crud.GetAll(c)
 }
 
-// CreateOrUpdateSchedule upserts a schedule and returns the full list.
-// Persistence is handled by the scheduled persistence goroutine.
+// CreateOrUpdateSchedule handles POST /schedule - creates or updates a schedule.
 func (sc *ScheduleController) CreateOrUpdateSchedule(c *gin.Context) {
-	var schedule repository.Schedule
-	if err := c.ShouldBindJSON(&schedule); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
-		return
-	}
-
-	if sc.validator != nil {
-		if err := sc.validator.Struct(schedule); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
-	updatedDoc, err := sc.store.AddSchedule(schedule)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update cache"})
-		return
-	}
-
-	c.JSON(http.StatusOK, updatedDoc.Schedules)
+	logger.WithComponent("schedule-controller").Debugf("POST /schedule handler called")
+	sc.crud.CreateOrUpdate(c)
 }
 
+// DeleteSchedule handles DELETE /schedule/:id - deletes a schedule by ID.
 func (sc *ScheduleController) DeleteSchedule(c *gin.Context) {
 	id := c.Param("id")
+	logger.WithComponent("schedule-controller").Debugf("DELETE /schedule/%s handler called", id)
 	if id == "" {
+		logger.WithComponent("schedule-controller").Debugf("delete schedule: missing id parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing schedule id"})
 		return
 	}
 
-	updatedDoc, err := sc.store.RemoveSchedule(id)
+	items, err := sc.crud.Service.Remove(id)
 	if err != nil {
 		if errors.Is(err, cache.ErrScheduleNotFound) {
+			logger.WithComponent("schedule-controller").Debugf("delete schedule %s: not found", id)
 			c.JSON(http.StatusNotFound, gin.H{"error": "schedule not found"})
 			return
 		}
+		logger.WithComponent("schedule-controller").Errorf("delete schedule %s: cache error: %v", id, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update cache"})
 		return
 	}
 
-	c.JSON(http.StatusOK, updatedDoc.Schedules)
+	logger.WithComponent("schedule-controller").Debugf("schedule %s deleted successfully", id)
+	c.JSON(http.StatusOK, items)
 }

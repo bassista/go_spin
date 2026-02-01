@@ -20,12 +20,13 @@ func TestConfig_Validate_Valid(t *testing.T) {
 			PersistInterval: 5 * time.Second,
 		},
 		Misc: MiscConfig{
-			GinMode:            "release",
-			SchedulingEnabled:  true,
-			SchedulingPoll:     30 * time.Second,
-			SchedulingTZ:       "Local",
-			RuntimeType:        "docker",
-			CORSAllowedOrigins: "*",
+			GinMode:              "release",
+			SchedulingEnabled:    true,
+			SchedulingPoll:       30 * time.Second,
+			RequestTimeoutMillis: 1000 * time.Millisecond,
+			SchedulingTZ:         "Local",
+			RuntimeType:          "docker",
+			CORSAllowedOrigins:   "*",
 		},
 	}
 
@@ -232,8 +233,9 @@ func TestConfig_Validate_ValidTimezones(t *testing.T) {
 					PersistInterval: 5 * time.Second,
 				},
 				Misc: MiscConfig{
-					SchedulingPoll: 30 * time.Second,
-					SchedulingTZ:   tz,
+					SchedulingPoll:       30 * time.Second,
+					RequestTimeoutMillis: 1000 * time.Millisecond,
+					SchedulingTZ:         tz,
 				},
 			}
 

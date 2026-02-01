@@ -8,7 +8,7 @@ misc:
   gin_mode: debug 
   runtime_type: docker  # possible values: memory, docker
   cors_allowed_origins: "*"   
-  log_level: info
+  log_level: debug
   log_format: text  
     
 

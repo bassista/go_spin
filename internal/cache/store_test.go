@@ -421,11 +421,14 @@ func TestStore_Concurrency(t *testing.T) {
 
 // mockSaver implements repository.Saver for testing
 type mockSaver struct {
+	mu        sync.Mutex
 	savedDocs []*repository.DataDocument
 	saveErr   error
 }
 
-func (m *mockSaver) Save(doc *repository.DataDocument) error {
+func (m *mockSaver) Save(ctx context.Context, doc *repository.DataDocument) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.saveErr != nil {
 		return m.saveErr
 	}
@@ -527,5 +530,244 @@ func TestStartPersistenceScheduler_FinalFlushOnShutdown(t *testing.T) {
 	// Should have done final flush
 	if len(saver.savedDocs) < 1 {
 		t.Error("expected final flush on shutdown")
+	}
+}
+
+// ==================== Concurrency Tests ====================
+
+// TestStore_ConcurrentAddContainer verifies that concurrent AddContainer operations
+// are thread-safe and don't cause data corruption.
+func TestStore_ConcurrentAddContainer(t *testing.T) {
+	doc := createTestDocument()
+	store := NewStore(doc)
+
+	var wg sync.WaitGroup
+	const numGoroutines = 50
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			container := repository.Container{
+				Name:         "concurrent-container-" + string(rune('a'+idx%26)),
+				FriendlyName: "Concurrent Container",
+				URL:          "http://concurrent.local",
+				Running:      boolPtr(false),
+				Active:       boolPtr(true),
+			}
+			_, err := store.AddContainer(container)
+			if err != nil {
+				t.Errorf("AddContainer error: %v", err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Store should be dirty
+	if !store.IsDirty() {
+		t.Error("expected store to be dirty after concurrent adds")
+	}
+
+	// Snapshot should be valid
+	snapshot, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot error: %v", err)
+	}
+	if len(snapshot.Containers) < 2 {
+		t.Error("expected at least 2 containers after concurrent adds")
+	}
+}
+
+// TestStore_ConcurrentSnapshotAndModify verifies that taking snapshots while
+// modifying the store is thread-safe.
+func TestStore_ConcurrentSnapshotAndModify(t *testing.T) {
+	doc := createTestDocument()
+	store := NewStore(doc)
+
+	var wg sync.WaitGroup
+	const numGoroutines = 100
+
+	// Concurrent snapshots
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := store.Snapshot()
+			if err != nil {
+				t.Errorf("Snapshot error: %v", err)
+			}
+		}()
+	}
+
+	// Concurrent modifications
+	for i := 0; i < numGoroutines/2; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			container := repository.Container{
+				Name:         "snapshot-test-" + string(rune('a'+idx%26)),
+				FriendlyName: "Snapshot Test",
+				URL:          "http://snapshot.local",
+				Running:      boolPtr(false),
+				Active:       boolPtr(true),
+			}
+			_, _ = store.AddContainer(container)
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+// TestStore_ConcurrentDirtyFlag verifies that concurrent MarkDirty/ClearDirty/IsDirty
+// operations are thread-safe.
+func TestStore_ConcurrentDirtyFlag(t *testing.T) {
+	doc := createTestDocument()
+	store := NewStore(doc)
+
+	var wg sync.WaitGroup
+	const numGoroutines = 100
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(3)
+
+		// Concurrent MarkDirty
+		go func() {
+			defer wg.Done()
+			store.MarkDirty()
+		}()
+
+		// Concurrent IsDirty
+		go func() {
+			defer wg.Done()
+			_ = store.IsDirty()
+		}()
+
+		// Concurrent ClearDirty
+		go func() {
+			defer wg.Done()
+			store.ClearDirty()
+		}()
+	}
+
+	wg.Wait()
+}
+
+// TestStore_ConcurrentLastUpdate verifies that concurrent GetLastUpdate/SetLastUpdate
+// operations are thread-safe.
+func TestStore_ConcurrentLastUpdate(t *testing.T) {
+	doc := createTestDocument()
+	store := NewStore(doc)
+
+	var wg sync.WaitGroup
+	const numGoroutines = 100
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(2)
+
+		// Concurrent SetLastUpdate
+		go func(idx int) {
+			defer wg.Done()
+			store.SetLastUpdate(int64(1000 + idx))
+		}(i)
+
+		// Concurrent GetLastUpdate
+		go func() {
+			defer wg.Done()
+			_ = store.GetLastUpdate()
+		}()
+	}
+
+	wg.Wait()
+}
+
+// TestStartPersistenceScheduler_ConcurrentModifications verifies that the
+// persistence scheduler handles concurrent store modifications correctly.
+func TestStartPersistenceScheduler_ConcurrentModifications(t *testing.T) {
+	doc := createTestDocument()
+	store := NewStore(doc)
+	saver := &mockSaver{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start persistence scheduler with short interval
+	StartPersistenceScheduler(ctx, store, saver, 20*time.Millisecond)
+
+	var wg sync.WaitGroup
+	const numGoroutines = 30
+
+	// Concurrent modifications while scheduler is running
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			container := repository.Container{
+				Name:         "persist-test-" + string(rune('a'+idx%26)),
+				FriendlyName: "Persist Test",
+				URL:          "http://persist.local",
+				Running:      boolPtr(false),
+				Active:       boolPtr(true),
+			}
+			_, _ = store.AddContainer(container)
+			// Small delay to allow scheduler ticks
+			time.Sleep(5 * time.Millisecond)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Give time for scheduler to process
+	time.Sleep(100 * time.Millisecond)
+
+	// Should have saved at least once
+	saver.mu.Lock()
+	saveCount := len(saver.savedDocs)
+	saver.mu.Unlock()
+
+	if saveCount < 1 {
+		t.Error("expected at least one save during concurrent modifications")
+	}
+}
+
+// TestStore_ConcurrentReplaceAndSnapshot verifies that Replace and Snapshot
+// operations work correctly when called concurrently.
+func TestStore_ConcurrentReplaceAndSnapshot(t *testing.T) {
+	doc := createTestDocument()
+	store := NewStore(doc)
+
+	var wg sync.WaitGroup
+	const numGoroutines = 50
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(2)
+
+		// Concurrent Replace
+		go func(idx int) {
+			defer wg.Done()
+			newDoc := repository.DataDocument{
+				Metadata:   repository.Metadata{LastUpdate: int64(2000 + idx)},
+				Containers: []repository.Container{},
+				Order:      []string{},
+			}
+			_ = store.Replace(newDoc)
+		}(i)
+
+		// Concurrent Snapshot
+		go func() {
+			defer wg.Done()
+			_, _ = store.Snapshot()
+		}()
+	}
+
+	wg.Wait()
+
+	// Final snapshot should be valid
+	snapshot, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("final snapshot error: %v", err)
+	}
+	if snapshot.Metadata.LastUpdate < 2000 {
+		t.Errorf("expected lastUpdate >= 2000, got %d", snapshot.Metadata.LastUpdate)
 	}
 }

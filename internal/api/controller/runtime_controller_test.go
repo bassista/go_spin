@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/bassista/go_spin/internal/repository"
 	"github.com/gin-gonic/gin"
 )
 
@@ -48,11 +49,39 @@ func (m *mockContainerRuntime) Stop(ctx context.Context, name string) error {
 	return nil
 }
 
+// newMockStoreWithContainer creates a mock store with a container
+func newMockStoreWithContainer(name string) *mockContainerStore {
+	return &mockContainerStore{
+		doc: repository.DataDocument{
+			Containers: []repository.Container{
+				{Name: name},
+			},
+		},
+	}
+}
+
+// newMockStoreEmpty creates an empty mock store
+func newMockStoreEmpty() *mockContainerStore {
+	return &mockContainerStore{
+		doc: repository.DataDocument{
+			Containers: []repository.Container{},
+		},
+	}
+}
+
 func TestRuntimeController_IsRunning_Success(t *testing.T) {
 	rt := newMockRuntime()
 	rt.runningContainers["my-container"] = true
 
-	rc := NewRuntimeController(rt)
+	store := &mockContainerStore{
+		doc: repository.DataDocument{
+			Containers: []repository.Container{
+				{Name: "my-container"},
+			},
+		},
+	}
+
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -83,7 +112,8 @@ func TestRuntimeController_IsRunning_NotRunning(t *testing.T) {
 	rt := newMockRuntime()
 	rt.runningContainers["stopped-container"] = false
 
-	rc := NewRuntimeController(rt)
+	store := newMockStoreWithContainer("stopped-container")
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -109,7 +139,8 @@ func TestRuntimeController_IsRunning_NotRunning(t *testing.T) {
 
 func TestRuntimeController_IsRunning_MissingName(t *testing.T) {
 	rt := newMockRuntime()
-	rc := NewRuntimeController(rt)
+	store := newMockStoreEmpty()
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	// Test with empty name param - controller validates and returns 400
@@ -131,7 +162,8 @@ func TestRuntimeController_IsRunning_RuntimeError(t *testing.T) {
 	rt := newMockRuntime()
 	rt.isRunningErr = errors.New("docker connection failed")
 
-	rc := NewRuntimeController(rt)
+	store := newMockStoreWithContainer("my-container")
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -146,9 +178,30 @@ func TestRuntimeController_IsRunning_RuntimeError(t *testing.T) {
 	}
 }
 
+func TestRuntimeController_IsRunning_ContainerNotFound(t *testing.T) {
+	rt := newMockRuntime()
+	rt.isRunningErr = errors.New("container nonexistent not found")
+
+	store := newMockStoreWithContainer("nonexistent")
+	rc := NewRuntimeController(rt, store)
+
+	r := gin.New()
+	r.GET("/runtime/:name/status", rc.IsRunning)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime/nonexistent/status", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
 func TestRuntimeController_StartContainer_Success(t *testing.T) {
 	rt := newMockRuntime()
-	rc := NewRuntimeController(rt)
+	store := newMockStoreWithContainer("my-container")
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	r.POST("/runtime/:name/start", rc.StartContainer)
@@ -182,7 +235,8 @@ func TestRuntimeController_StartContainer_Success(t *testing.T) {
 
 func TestRuntimeController_StartContainer_MissingName(t *testing.T) {
 	rt := newMockRuntime()
-	rc := NewRuntimeController(rt)
+	store := newMockStoreEmpty()
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	// Test with empty name param - controller validates and returns 400
@@ -201,14 +255,15 @@ func TestRuntimeController_StartContainer_MissingName(t *testing.T) {
 
 func TestRuntimeController_StartContainer_RuntimeError(t *testing.T) {
 	rt := newMockRuntime()
-	rt.startErr = errors.New("container not found")
+	rt.startErr = errors.New("docker daemon unavailable")
 
-	rc := NewRuntimeController(rt)
+	store := newMockStoreWithContainer("my-container")
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	r.POST("/runtime/:name/start", rc.StartContainer)
 
-	req := httptest.NewRequest(http.MethodPost, "/runtime/nonexistent/start", nil)
+	req := httptest.NewRequest(http.MethodPost, "/runtime/my-container/start", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -218,11 +273,32 @@ func TestRuntimeController_StartContainer_RuntimeError(t *testing.T) {
 	}
 }
 
+func TestRuntimeController_StartContainer_ContainerNotFound(t *testing.T) {
+	rt := newMockRuntime()
+	rt.startErr = errors.New("error starting container nonexistent: container not found")
+
+	store := newMockStoreWithContainer("nonexistent")
+	rc := NewRuntimeController(rt, store)
+
+	r := gin.New()
+	r.POST("/runtime/:name/start", rc.StartContainer)
+
+	req := httptest.NewRequest(http.MethodPost, "/runtime/nonexistent/start", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
 func TestRuntimeController_StopContainer_Success(t *testing.T) {
 	rt := newMockRuntime()
 	rt.runningContainers["my-container"] = true
 
-	rc := NewRuntimeController(rt)
+	store := newMockStoreWithContainer("my-container")
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	r.POST("/runtime/:name/stop", rc.StopContainer)
@@ -256,7 +332,8 @@ func TestRuntimeController_StopContainer_Success(t *testing.T) {
 
 func TestRuntimeController_StopContainer_MissingName(t *testing.T) {
 	rt := newMockRuntime()
-	rc := NewRuntimeController(rt)
+	store := newMockStoreEmpty()
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	// Test with empty name param - controller validates and returns 400
@@ -277,7 +354,8 @@ func TestRuntimeController_StopContainer_RuntimeError(t *testing.T) {
 	rt := newMockRuntime()
 	rt.stopErr = errors.New("container already stopped")
 
-	rc := NewRuntimeController(rt)
+	store := newMockStoreWithContainer("my-container")
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	r.POST("/runtime/:name/stop", rc.StopContainer)
@@ -292,9 +370,30 @@ func TestRuntimeController_StopContainer_RuntimeError(t *testing.T) {
 	}
 }
 
+func TestRuntimeController_StopContainer_ContainerNotFound(t *testing.T) {
+	rt := newMockRuntime()
+	rt.stopErr = errors.New("error stopping container nonexistent: container not found")
+
+	store := newMockStoreWithContainer("nonexistent")
+	rc := NewRuntimeController(rt, store)
+
+	r := gin.New()
+	r.POST("/runtime/:name/stop", rc.StopContainer)
+
+	req := httptest.NewRequest(http.MethodPost, "/runtime/nonexistent/stop", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
 func TestRuntimeController_FullLifecycle(t *testing.T) {
 	rt := newMockRuntime()
-	rc := NewRuntimeController(rt)
+	store := newMockStoreWithContainer("lifecycle-test")
+	rc := NewRuntimeController(rt, store)
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -350,5 +449,58 @@ func TestRuntimeController_FullLifecycle(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["running"] != false {
 		t.Errorf("expected container to be stopped after stop")
+	}
+}
+func TestRuntimeController_IsRunning_NotFoundInCache(t *testing.T) {
+	rt := newMockRuntime()
+	store := newMockStoreEmpty() // Empty store - container doesn't exist
+	rc := NewRuntimeController(rt, store)
+
+	r := gin.New()
+	r.GET("/runtime/:name/status", rc.IsRunning)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime/nonexistent/status", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestRuntimeController_StartContainer_NotFoundInCache(t *testing.T) {
+	rt := newMockRuntime()
+	store := newMockStoreEmpty() // Empty store - container doesn't exist
+	rc := NewRuntimeController(rt, store)
+
+	r := gin.New()
+	r.POST("/runtime/:name/start", rc.StartContainer)
+
+	req := httptest.NewRequest(http.MethodPost, "/runtime/nonexistent/start", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestRuntimeController_StopContainer_NotFoundInCache(t *testing.T) {
+	rt := newMockRuntime()
+	store := newMockStoreEmpty() // Empty store - container doesn't exist
+	rc := NewRuntimeController(rt, store)
+
+	r := gin.New()
+	r.POST("/runtime/:name/stop", rc.StopContainer)
+
+	req := httptest.NewRequest(http.MethodPost, "/runtime/nonexistent/stop", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
 	}
 }

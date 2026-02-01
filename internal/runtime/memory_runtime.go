@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/bassista/go_spin/internal/logger"
 	"github.com/bassista/go_spin/internal/repository"
 )
 
@@ -34,12 +35,15 @@ func NewMemoryRuntimeFromDocument(doc repository.DataDocument) *MemoryRuntime {
 func (m *MemoryRuntime) IsRunning(_ context.Context, containerName string) (bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.running[containerName], nil
+	isRunning := m.running[containerName]
+	logger.WithComponent("memory-runtime").Debugf("checking if container is running: %s, result: %v", containerName, isRunning)
+	return isRunning, nil
 }
 
 func (m *MemoryRuntime) Start(_ context.Context, containerName string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	logger.WithComponent("memory-runtime").Debugf("starting container: %s", containerName)
 	m.running[containerName] = true
 	return nil
 }
@@ -47,6 +51,7 @@ func (m *MemoryRuntime) Start(_ context.Context, containerName string) error {
 func (m *MemoryRuntime) Stop(_ context.Context, containerName string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	logger.WithComponent("memory-runtime").Debugf("stopping container: %s", containerName)
 	m.running[containerName] = false
 	return nil
 }
