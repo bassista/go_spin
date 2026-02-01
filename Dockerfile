@@ -17,7 +17,7 @@ COPY . .
 
 #RUN templ generate
 #RUN ./tailwindcss -i cmd/web/styles/input.css -o cmd/web/assets/css/output.css
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build -o /app/main ./cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build -o /app/main ./cmd/server/main.go
 
 FROM alpine:3.20.1 AS prod
 RUN apk add --no-cache ca-certificates curl
