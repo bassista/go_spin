@@ -43,9 +43,9 @@ jobs:
         run: |
           pct=${{ steps.cov.outputs.percentage }}
           color="red"
-          if (( $(echo "$pct > 90" | bc -l) )); then color="brightgreen"; fi
-          if (( $(echo "$pct > 75" | bc -l) )); then color="green"; fi
           if (( $(echo "$pct > 60" | bc -l) )); then color="yellow"; fi
+          if (( $(echo "$pct > 75" | bc -l) )); then color="green"; fi
+          if (( $(echo "$pct > 90" | bc -l) )); then color="brightgreen"; fi
           echo "<img src=\"https://img.shields.io/badge/Coverage-$pct%25-$color\"/>" > public/badge.html
 
       - name: Copy coverage text file
@@ -93,9 +93,9 @@ jobs:
         run: |
           pct=${{ steps.cov.outputs.percentage }}
           color="red"
-          if (( $(echo "$pct > 90" | bc -l) )); then color="brightgreen"; fi
-          if (( $(echo "$pct > 75" | bc -l) )); then color="green"; fi
           if (( $(echo "$pct > 60" | bc -l) )); then color="yellow"; fi
+          if (( $(echo "$pct > 75" | bc -l) )); then color="green"; fi
+          if (( $(echo "$pct > 90" | bc -l) )); then color="brightgreen"; fi
 
           curl -L "https://img.shields.io/badge/Coverage-${pct}%25-${color}.png" \
             -o public/coverage.png
