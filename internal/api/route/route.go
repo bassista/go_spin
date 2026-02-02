@@ -18,6 +18,16 @@ func SetupRoutes(r *gin.Engine, appCtx *app.App) {
 		})
 	})
 
+	// Serve favicon
+	r.GET("/favicon.ico", func(c *gin.Context) {
+		c.File("./ui/assets/vite.ico")
+	})
+
+	// Redirect root to /ui
+	r.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/ui")
+	})
+
 	// All Public APIs
 	publicRouter := r.Group("")
 

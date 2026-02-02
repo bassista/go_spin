@@ -555,9 +555,9 @@ func TestRuntimeController_WaitingPage_ContainerNotFound(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/nonexistent/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/nonexistent", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -573,9 +573,9 @@ func TestRuntimeController_WaitingPage_ContainerNotActive(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/my-container/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/my-container", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -593,9 +593,9 @@ func TestRuntimeController_WaitingPage_ContainerActiveAndRunning(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/my-container/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/my-container", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -619,9 +619,9 @@ func TestRuntimeController_WaitingPage_ContainerActiveNotRunning(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/my-container/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/my-container", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -640,9 +640,9 @@ func TestRuntimeController_WaitingPage_GroupNotFound(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/nonexistent-group/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/nonexistent-group", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -658,9 +658,9 @@ func TestRuntimeController_WaitingPage_GroupNotActive(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/my-group/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/my-group", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -676,9 +676,9 @@ func TestRuntimeController_WaitingPage_GroupActiveSuccess(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/my-group/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/my-group", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -700,15 +700,15 @@ func TestRuntimeController_WaitingPage_MissingName(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime//waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", w.Code)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
 	}
 }
 
@@ -724,9 +724,9 @@ func TestRuntimeController_WaitingPage_GroupEmptyContainers(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/empty-group/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/empty-group", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -749,9 +749,9 @@ func TestRuntimeController_WaitingPage_GroupWithNonexistentContainers(t *testing
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/my-group/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/my-group", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -782,9 +782,9 @@ func TestRuntimeController_WaitingPage_SnapshotError(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/my-container/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/my-container", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -806,9 +806,9 @@ func TestRuntimeController_WaitingPage_ContainerWithNilActive(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/my-container/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/my-container", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
@@ -834,9 +834,9 @@ func TestRuntimeController_WaitingPage_GroupWithNilActive(t *testing.T) {
 	rc := NewRuntimeController(context.Background(), rt, store)
 
 	r := gin.New()
-	r.GET("/runtime/:name/waiting", rc.WaitingPage)
+	r.GET("/start/:name", rc.WaitingPage)
 
-	req := httptest.NewRequest(http.MethodGet, "/runtime/my-group/waiting", nil)
+	req := httptest.NewRequest(http.MethodGet, "/start/my-group", nil)
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)

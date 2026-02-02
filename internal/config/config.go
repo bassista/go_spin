@@ -90,13 +90,8 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
-	fileStorePath := viper.GetString("data.file_path")
-	logger.WithComponent("config").Infof("Using data file: %s", fileStorePath)
-
-	// Ensure the directory for the data file exists
-	dataDir := filepath.Dir(fileStorePath)
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create data directory %s: %w", dataDir, err)
+	if err := dataFileExistenceCheck(); err != nil {
+		return nil, err
 	}
 
 	// Build immutable config struct
@@ -139,6 +134,31 @@ func LoadConfig() (*Config, error) {
 	fmt.Println("All configuration loaded successfully")
 
 	return cfg, nil
+}
+
+func dataFileExistenceCheck() error {
+	fileStorePath := viper.GetString("data.file_path")
+	logger.WithComponent("config").Infof("Using data file: %s", fileStorePath)
+
+	// Ensure the directory for the data file exists
+	dataDir := filepath.Dir(fileStorePath)
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return fmt.Errorf("failed to create data directory %s: %w", dataDir, err)
+	}
+
+	//if the file does not exist, create an empty one with empty json object
+	if _, err := os.Stat(fileStorePath); os.IsNotExist(err) {
+		emptyFile, err := os.Create(fileStorePath)
+		if err != nil {
+			return fmt.Errorf("failed to create data file %s: %w", fileStorePath, err)
+		}
+		defer emptyFile.Close()
+		if _, err := emptyFile.WriteString("{}"); err != nil {
+			return fmt.Errorf("failed to write to data file %s: %w", fileStorePath, err)
+		}
+		logger.WithComponent("config").Infof("Created new EMPTY data file: %s", fileStorePath)
+	}
+	return nil
 }
 
 // validate checks required configuration fields
