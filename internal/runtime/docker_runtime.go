@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/bassista/go_spin/internal/logger"
@@ -81,10 +82,11 @@ func (d *DockerRuntime) Stop(ctx context.Context, containerName string) error {
 }
 
 // ListContainers returns a list of container names from the Docker daemon.
-// Names are returned exactly as stored (case-sensitive).
+// Names are returned exactly as stored (case-sensitive), sorted alphabetically (case-insensitive).
+// This includes all containers (running and stopped).
 func (d *DockerRuntime) ListContainers(ctx context.Context) ([]string, error) {
 	logger.WithComponent("docker").Debugf("listing containers")
-	result, err := d.cli.ContainerList(ctx, client.ContainerListOptions{})
+	result, err := d.cli.ContainerList(ctx, client.ContainerListOptions{All: true})
 	if err != nil {
 		logger.WithComponent("docker").Errorf("failed to list containers: %v", err)
 		return nil, fmt.Errorf("error listing containers: %w", err)
@@ -100,6 +102,10 @@ func (d *DockerRuntime) ListContainers(ctx context.Context) ([]string, error) {
 			names = append(names, name)
 		}
 	}
+	// Sort names alphabetically, case-insensitive
+	sort.Slice(names, func(i, j int) bool {
+		return strings.ToLower(names[i]) < strings.ToLower(names[j])
+	})
 	logger.WithComponent("docker").Debugf("listed %d containers: %v", len(names), names)
 	return names, nil
 }

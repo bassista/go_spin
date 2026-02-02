@@ -225,11 +225,12 @@ func TestDockerRuntime_ListContainers_Success(t *testing.T) {
 		},
 	}
 
-	mockClient.On("ContainerList", ctx, client.ContainerListOptions{}).Return(listResult, nil)
+	mockClient.On("ContainerList", ctx, client.ContainerListOptions{All: true}).Return(listResult, nil)
 
 	names, err := dr.ListContainers(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, []string{"MyApp", "another-container"}, names)
+	// Names are sorted alphabetically, case-insensitive
+	assert.Equal(t, []string{"another-container", "MyApp"}, names)
 	mockClient.AssertExpectations(t)
 }
 
@@ -241,7 +242,7 @@ func TestDockerRuntime_ListContainers_Empty(t *testing.T) {
 
 	listResult := client.ContainerListResult{Items: []container.Summary{}}
 
-	mockClient.On("ContainerList", ctx, client.ContainerListOptions{}).Return(listResult, nil)
+	mockClient.On("ContainerList", ctx, client.ContainerListOptions{All: true}).Return(listResult, nil)
 
 	names, err := dr.ListContainers(ctx)
 	assert.NoError(t, err)
@@ -255,7 +256,7 @@ func TestDockerRuntime_ListContainers_Error(t *testing.T) {
 
 	ctx := context.Background()
 
-	mockClient.On("ContainerList", ctx, client.ContainerListOptions{}).Return(client.ContainerListResult{}, errors.New("list failed"))
+	mockClient.On("ContainerList", ctx, client.ContainerListOptions{All: true}).Return(client.ContainerListResult{}, errors.New("list failed"))
 
 	names, err := dr.ListContainers(ctx)
 	assert.Error(t, err)

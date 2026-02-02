@@ -210,6 +210,12 @@ func (rc *RuntimeController) WaitingPage(c *gin.Context) {
 // findContainer searches for a container by name in the data document.
 func (rc *RuntimeController) findContainer(doc repository.DataDocument, name string) (*repository.Container, bool) {
 	for i := range doc.Containers {
+		if doc.Containers[i].FriendlyName == name {
+			return &doc.Containers[i], true
+		}
+	}
+
+	for i := range doc.Containers {
 		if doc.Containers[i].Name == name {
 			return &doc.Containers[i], true
 		}

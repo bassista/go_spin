@@ -3,6 +3,7 @@ package cache
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/bassista/go_spin/internal/logger"
@@ -93,6 +94,8 @@ func (s *Store) AddContainer(container repository.Container) (repository.DataDoc
 	if err != nil {
 		return repository.DataDocument{}, err
 	}
+
+	clonedContainer.FriendlyName = strings.ToLower(clonedContainer.FriendlyName)
 
 	inOrder := false
 	for _, name := range s.data.Order {
