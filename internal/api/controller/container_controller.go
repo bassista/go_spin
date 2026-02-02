@@ -106,6 +106,7 @@ func (cc *ContainerController) Ready(c *gin.Context) {
 		}
 	}
 	if container == nil {
+		logger.WithComponent("container-controller").Warnf("ready: container not found: %s", name)
 		c.JSON(http.StatusNotFound, gin.H{"ready": false})
 		return
 	}
@@ -123,6 +124,7 @@ func (cc *ContainerController) Ready(c *gin.Context) {
 	}
 
 	if container.URL == "" {
+		logger.WithComponent("container-controller").Warnf("ready: container URL is empty: %s", name)
 		c.JSON(http.StatusInternalServerError, gin.H{"ready": false})
 		return
 	}
@@ -156,5 +158,7 @@ func (cc *ContainerController) Ready(c *gin.Context) {
 		_ = resp.Body.Close()
 	}()
 
-	c.JSON(http.StatusOK, gin.H{"ready": resp.StatusCode == http.StatusOK})
+	isContainerUrlReady := resp.StatusCode == http.StatusOK
+	logger.WithComponent("container-controller").Debugf("GET /container/%s/ready handled with status: %v", name, isContainerUrlReady)
+	c.JSON(http.StatusOK, gin.H{"ready": isContainerUrlReady})
 }

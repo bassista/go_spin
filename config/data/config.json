@@ -4,8 +4,8 @@
   },
   "containers": [
     {
-      "name": "deluge",
-      "friendly_name": "qb781",
+      "name": "Deluge",
+      "friendly_name": "deluge",
       "url": "https://deluge.lan.asga.uk",
       "running": true,
       "active": true,
