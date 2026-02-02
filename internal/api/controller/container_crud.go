@@ -22,15 +22,19 @@ func (s *ContainerCrudService) All() ([]repository.Container, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, c := range doc.Containers {
+
+	for i := range doc.Containers {
+		c := &doc.Containers[i]
 		running, err := s.Runtime.IsRunning(s.Ctx, c.Name)
 		if err != nil {
-			v := false
-			c.Running = &v
+			falseVal := false
+			c.Running = &falseVal
 			continue
 		}
-		c.Running = &running
+		val := running
+		c.Running = &val
 	}
+
 	return doc.Containers, nil
 }
 
