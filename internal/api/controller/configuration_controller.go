@@ -9,7 +9,8 @@ import (
 
 // ConfigurationResponse represents the configuration response structure for the API.
 type ConfigurationResponse struct {
-	BaseUrl string `json:"baseUrl"`
+	BaseUrl   string `json:"baseUrl"`
+	SpinUpUrl string `json:"spinUpUrl"`
 }
 
 // ConfigurationController handles configuration-related API endpoints.
@@ -27,7 +28,8 @@ func NewConfigurationController(cfg *config.Config) *ConfigurationController {
 // GetConfiguration returns the application configuration for the frontend.
 func (cc *ConfigurationController) GetConfiguration(c *gin.Context) {
 	response := ConfigurationResponse{
-		BaseUrl: cc.config.Data.BaseUrl,
+		BaseUrl:   cc.config.Data.BaseUrl,
+		SpinUpUrl: cc.config.Data.SpinUpUrl,
 	}
 	c.JSON(http.StatusOK, response)
 }

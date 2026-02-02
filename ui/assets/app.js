@@ -52,7 +52,8 @@ function app() {
         
         // Server configuration
         configuration: {
-            baseUrl: ''
+            baseUrl: '',
+            spinUpUrl: ''
         },
         
         // Initialize
@@ -99,6 +100,30 @@ function app() {
                 url += '/';
             }
             url += name;
+            // Remove any double slashes (except after protocol)
+            return url.replace(/([^:])(\/\/+)/g, '$1/');
+        },
+        
+        // Generate SpinUp URL based on friendly_name and spinUpUrl configuration
+        generateSpinUpUrl(friendlyName) {
+            const spinUpUrl = this.configuration.spinUpUrl || '';
+            
+            if (!spinUpUrl || spinUpUrl.trim() === '') {
+                // If spinUpUrl is empty, return empty string
+                return '';
+            }
+            
+            if (spinUpUrl.includes('$1')) {
+                // If spinUpUrl contains $1 token, replace it with the friendly_name
+                return spinUpUrl.replace('$1', friendlyName);
+            }
+            
+            // Otherwise, append the friendly_name to spinUpUrl, avoiding double slashes
+            let url = spinUpUrl;
+            if (!url.endsWith('/')) {
+                url += '/';
+            }
+            url += friendlyName;
             // Remove any double slashes (except after protocol)
             return url.replace(/([^:])(\/\/+)/g, '$1/');
         },

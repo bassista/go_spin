@@ -39,6 +39,7 @@ type DataConfig struct {
 	SchedulingEnabled bool
 	SchedulingPoll    time.Duration
 	BaseUrl           string
+	SpinUpUrl         string
 }
 
 type MiscConfig struct {
@@ -77,6 +78,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("data.scheduling_enabled", true)
 	viper.SetDefault("data.scheduling_poll_interval_secs", 30)
 	viper.SetDefault("data.base_url", "http://localhost/")
+	viper.SetDefault("data.spin_up_url", "http://localhost/")
 	viper.SetDefault("misc.gin_mode", "release")
 	viper.SetDefault("misc.scheduling_timezone", "Local")
 	viper.SetDefault("misc.runtime_type", "docker")
@@ -127,6 +129,7 @@ func LoadConfig() (*Config, error) {
 			SchedulingEnabled: viper.GetBool("data.scheduling_enabled"),
 			SchedulingPoll:    time.Duration(viper.GetInt("data.scheduling_poll_interval_secs")) * time.Second,
 			BaseUrl:           viper.GetString("data.base_url"),
+			SpinUpUrl:         viper.GetString("data.spin_up_url"),
 		},
 		Misc: MiscConfig{
 			GinMode:      viper.GetString("misc.gin_mode"),
