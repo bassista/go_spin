@@ -68,3 +68,7 @@ build: ## Build and compile the application binary
 .PHONY: docker_build
 docker_build: ## Build docker image
 	docker build -f Dockerfile --platform $(OS_SYSNAME)/$(OS_MACHINE) --build-arg BUILDPLATFORM=$(OS_SYSNAME)/$(OS_MACHINE) --build-arg opts="CGO_ENABLED=0 GOOS=$(OS_SYSNAME) GOARCH=$(OS_MACHINE)" -t bassista/gospin:latest . --progress plain --no-cache
+
+.PHONY: docker_push
+docker_push: ## Push docker image
+	docker push bassista/gospin:latest
