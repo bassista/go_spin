@@ -20,6 +20,7 @@ type mockContainerRuntime struct {
 	startErr          error
 	stopErr           error
 	isRunningErr      error
+	listErr           error
 }
 
 func newMockRuntime() *mockContainerRuntime {
@@ -58,6 +59,9 @@ func (m *mockContainerRuntime) Stop(ctx context.Context, name string) error {
 }
 
 func (m *mockContainerRuntime) ListContainers(ctx context.Context) ([]string, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	names := make([]string, 0, len(m.runningContainers))
@@ -77,6 +81,8 @@ func newMockStoreWithContainer(name string) *mockContainerStore {
 		},
 	}
 }
+
+// Test for snapshot error
 
 // newMockStoreEmpty creates an empty mock store
 func newMockStoreEmpty() *mockContainerStore {
@@ -854,5 +860,53 @@ func TestRuntimeController_WaitingPage_GroupWithNilActive(t *testing.T) {
 	// Group with nil active should be treated as not active (403)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("expected status 403, got %d", w.Code)
+	}
+}
+
+func TestRuntimeController_ListContainers_Success(t *testing.T) {
+	rt := newMockRuntime()
+	rt.runningContainers["one"] = true
+	rt.runningContainers["two"] = true
+
+	store := newMockStoreEmpty()
+	rc := NewRuntimeController(context.Background(), rt, store)
+
+	r := gin.New()
+	r.GET("/runtime/containers", rc.ListContainers)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime/containers", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	var resp []string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if len(resp) < 2 {
+		t.Errorf("expected at least 2 container names, got %v", resp)
+	}
+}
+
+func TestRuntimeController_ListContainers_Error(t *testing.T) {
+	rt := newMockRuntime()
+	rt.listErr = errors.New("list failed")
+	store := newMockStoreEmpty()
+	rc := NewRuntimeController(context.Background(), rt, store)
+
+	r := gin.New()
+	r.GET("/runtime/containers", rc.ListContainers)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime/containers", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500 on runtime error, got %d", w.Code)
 	}
 }

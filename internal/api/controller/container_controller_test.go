@@ -276,3 +276,170 @@ func TestContainerController_DeleteContainer_MissingName(t *testing.T) {
 		t.Errorf("expected status 400, got %d", w.Code)
 	}
 }
+
+// mockRuntime allows configuring IsRunning responses for testing Ready()
+type mockRuntime struct {
+	running bool
+	err     error
+}
+
+func (m *mockRuntime) IsRunning(ctx context.Context, containerName string) (bool, error) {
+	return m.running, m.err
+}
+func (m *mockRuntime) Start(ctx context.Context, containerName string) error { return nil }
+func (m *mockRuntime) Stop(ctx context.Context, containerName string) error  { return nil }
+func (m *mockRuntime) ListContainers(ctx context.Context) ([]string, error)  { return []string{}, nil }
+
+func TestContainerController_Ready_MissingName(t *testing.T) {
+	store := &mockContainerStore{}
+	cc := NewContainerController(store, &mockRuntime{running: true}, context.Background())
+
+	r := gin.New()
+	// register a route that does not provide :name so Param("name") is empty
+	r.GET("/container/ready", cc.Ready)
+
+	req := httptest.NewRequest(http.MethodGet, "/container/ready", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", w.Code)
+	}
+}
+
+func TestContainerController_Ready_NotFound(t *testing.T) {
+	store := &mockContainerStore{doc: repository.DataDocument{Containers: []repository.Container{}}}
+	cc := NewContainerController(store, &mockRuntime{running: true}, context.Background())
+
+	r := gin.New()
+	r.GET("/container/:name/ready", cc.Ready)
+
+	req := httptest.NewRequest(http.MethodGet, "/container/nonexistent/ready", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestContainerController_Ready_RuntimeErrorAndNotRunning(t *testing.T) {
+	active := true
+	running := false
+	// runtime returns error
+	store := &mockContainerStore{doc: repository.DataDocument{Containers: []repository.Container{{Name: "c1", FriendlyName: "C1", URL: "http://c1.local", Active: &active, Running: &running}}}}
+	cc := NewContainerController(store, &mockRuntime{running: false, err: errors.New("rt error")}, context.Background())
+
+	r := gin.New()
+	r.GET("/container/:name/ready", cc.Ready)
+
+	req := httptest.NewRequest(http.MethodGet, "/container/c1/ready", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200 on runtime error, got %d", w.Code)
+	}
+	var resp map[string]bool
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if v, ok := resp["ready"]; !ok || v != false {
+		t.Errorf("expected ready=false on runtime error, got %v", resp)
+	}
+
+	// runtime returns not running (false, nil)
+	cc = NewContainerController(store, &mockRuntime{running: false, err: nil}, context.Background())
+	r = gin.New()
+	r.GET("/container/:name/ready", cc.Ready)
+	req = httptest.NewRequest(http.MethodGet, "/container/c1/ready", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200 when not running, got %d", w.Code)
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if v, ok := resp["ready"]; !ok || v != false {
+		t.Errorf("expected ready=false when not running, got %v", resp)
+	}
+}
+
+func TestContainerController_Ready_EmptyURL(t *testing.T) {
+	active := true
+	running := true
+	store := &mockContainerStore{doc: repository.DataDocument{Containers: []repository.Container{{Name: "c2", FriendlyName: "C2", URL: "", Active: &active, Running: &running}}}}
+	cc := NewContainerController(store, &mockRuntime{running: true}, context.Background())
+
+	r := gin.New()
+	r.GET("/container/:name/ready", cc.Ready)
+
+	req := httptest.NewRequest(http.MethodGet, "/container/c2/ready", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500 for empty URL, got %d", w.Code)
+	}
+}
+
+func TestContainerController_Ready_HTTPCheck(t *testing.T) {
+	// Start a test server that returns 200
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	active := true
+	running := true
+	// Use the test server URL as container URL
+	store := &mockContainerStore{doc: repository.DataDocument{Containers: []repository.Container{{Name: "c3", FriendlyName: "C3", URL: ts.URL, Active: &active, Running: &running}}}}
+	cc := NewContainerController(store, &mockRuntime{running: true}, context.Background())
+
+	r := gin.New()
+	r.GET("/container/:name/ready", cc.Ready)
+
+	req := httptest.NewRequest(http.MethodGet, "/container/c3/ready", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200 for http check, got %d", w.Code)
+	}
+	var resp map[string]bool
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if v, ok := resp["ready"]; !ok || v != true {
+		t.Errorf("expected ready=true for http 200, got %v", resp)
+	}
+
+	// Start a server that returns 500
+	ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts2.Close()
+
+	store = &mockContainerStore{doc: repository.DataDocument{Containers: []repository.Container{{Name: "c4", FriendlyName: "C4", URL: ts2.URL, Active: &active, Running: &running}}}}
+	cc = NewContainerController(store, &mockRuntime{running: true}, context.Background())
+	r = gin.New()
+	r.GET("/container/:name/ready", cc.Ready)
+	req = httptest.NewRequest(http.MethodGet, "/container/c4/ready", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200 for http non-200, got %d", w.Code)
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if v, ok := resp["ready"]; !ok || v != false {
+		t.Errorf("expected ready=false for http non-200, got %v", resp)
+	}
+}

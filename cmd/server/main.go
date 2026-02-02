@@ -124,6 +124,8 @@ func createWaitingServer(app *appctx.App) *httpgrace.Server {
 	// Create RuntimeController for the waiting page
 	rc := controller.NewRuntimeController(app.BaseCtx, app.Runtime, app.Cache)
 	r.GET("/:name", rc.WaitingPage)
+	// Also expose legacy/alternate route for containers readiness
+	r.GET("/container/:name/ready", rc.WaitingPage)
 
 	slogLogger := slog.New(slog.NewTextHandler(logger.Logger.Writer(), nil))
 

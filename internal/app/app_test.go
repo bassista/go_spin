@@ -301,3 +301,31 @@ func TestApp_ContextCancellation(t *testing.T) {
 		t.Error("goroutine should have received cancellation within timeout")
 	}
 }
+
+func TestApp_StartWatchers_Success(t *testing.T) {
+	cfg := &config.Config{
+		Data: config.DataConfig{PersistInterval: 10},
+		Misc: config.MiscConfig{SchedulingEnabled: false},
+	}
+	repo := &mockRepository{}
+	store := &mockAppStore{}
+	rt := newMockRuntimeForApp()
+
+	app, err := New(cfg, repo, store, rt)
+	if err != nil {
+		t.Fatalf("failed to create app: %v", err)
+	}
+
+	app.StartWatchers()
+
+	if !repo.watcherStarted {
+		t.Error("expected repo watcher to be started")
+	}
+
+	if app.persistDone == nil {
+		t.Error("expected persistDone channel to be set after StartWatchers")
+	}
+
+	// Shutdown to clean up scheduler goroutine
+	app.Shutdown()
+}
