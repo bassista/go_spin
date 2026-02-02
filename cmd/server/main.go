@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"syscall"
 
 	"github.com/bassista/go_spin/internal/api/controller"
@@ -123,9 +124,20 @@ func createWaitingServer(app *appctx.App) *httpgrace.Server {
 
 	// Create RuntimeController for the waiting page
 	rc := controller.NewRuntimeController(app.BaseCtx, app.Runtime, app.Cache)
+	cc := controller.NewContainerController(app.BaseCtx, app.Cache, app.Runtime)
+
+	// Middleware fallback: handle /container/:name/ready explicitly to ensure JSON response
+	r.Use(func(c *gin.Context) {
+		// If the path matches /container/:name/ready, call the Ready handler directly and abort
+		if strings.HasPrefix(c.Request.URL.Path, "/container/") && strings.HasSuffix(c.Request.URL.Path, "/ready") {
+			cc.Ready(c)
+			c.Abort()
+			return
+		}
+		c.Next()
+	})
+
 	r.GET("/:name", rc.WaitingPage)
-	// Also expose legacy/alternate route for containers readiness
-	r.GET("/container/:name/ready", rc.WaitingPage)
 
 	slogLogger := slog.New(slog.NewTextHandler(logger.Logger.Writer(), nil))
 
