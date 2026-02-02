@@ -95,6 +95,7 @@ func (s *Store) AddContainer(container repository.Container) (repository.DataDoc
 		return repository.DataDocument{}, err
 	}
 
+	// Normalize FriendlyName to lowercase for consistency
 	clonedContainer.FriendlyName = strings.ToLower(clonedContainer.FriendlyName)
 
 	inOrder := false

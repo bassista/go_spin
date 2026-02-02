@@ -184,8 +184,8 @@ func TestStore_AddContainer_Update(t *testing.T) {
 		t.Errorf("expected 1 container after update, got %d", len(result.Containers))
 	}
 
-	if result.Containers[0].FriendlyName != "Updated Container 1" {
-		t.Error("expected container to be updated")
+	if result.Containers[0].FriendlyName != "updated container 1" {
+		t.Error("expected container to be updated and normalized to lowercase")
 	}
 
 	// Order should not be duplicated
