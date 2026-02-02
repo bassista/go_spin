@@ -4,9 +4,12 @@ services:
     image: gospin
     environment:
       - PORT=${PORT:-8083}
+      - WAITING_SERVER_PORT=${WAITING_SERVER_PORT:-8085}
+      - GO_SPIN_MISC_LOG_LEVEL=debug
       - GO_SPIN_CONFIG_PATH=/app/config
     ports:
       - "${PORT:-8083}:${PORT:-8083}"
+      - "${WAITING_SERVER_PORT:-8085}:${WAITING_SERVER_PORT:-8085}"
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock

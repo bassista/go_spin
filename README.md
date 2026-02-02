@@ -90,6 +90,14 @@ GO_SPIN_MISC_CORS_ALLOWED_ORIGINS=*
 GO_SPIN_CONFIG_PATH=./config
 ```
 
+# Waiting server port
+You can configure an auxiliary "waiting" HTTP server used by the `/runtime/:name/waiting` endpoint. This server serves the waiting HTML page (spinner + redirect) while a container or group is being started.
+
+```bash
+# Port used by the waiting server (default 8085)
+WAITING_SERVER_PORT=8085
+```
+
 ### .env File
 
 Environment variables can be provided also via .env file.

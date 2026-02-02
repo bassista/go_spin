@@ -71,6 +71,7 @@ go test ./...
 - `misc.scheduling_enabled`, `misc.scheduling_poll_interval_secs`
 - `misc.runtime_type` ("docker" or "memory")
 - `misc.cors_allowed_origins`
+- `WAITING_SERVER_PORT`: second server to expose only the route `/runtime/:name/waiting`.
 
 ## Main Data Structure
 ```

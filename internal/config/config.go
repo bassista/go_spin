@@ -23,11 +23,12 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port            int
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	ShutDownTimeout time.Duration
+	Port              int
+	WaitingServerPort int
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	ShutDownTimeout   time.Duration
 }
 
 type DataConfig struct {
@@ -62,6 +63,7 @@ func LoadConfig() (*Config, error) {
 
 	// Set defaults
 	viper.SetDefault("server.port", 8084)
+	viper.SetDefault("server.waiting_server_port", 8085)
 	viper.SetDefault("server.read_timeout_secs", 10)
 	viper.SetDefault("server.write_timeout_secs", 10)
 	viper.SetDefault("server.idle_timeout_secs", 120)
@@ -94,19 +96,25 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	// Build immutable config struct
 	port, err := getEnvOrViperPort("PORT", "server.port")
 	if err != nil {
 		return nil, err
 	}
 
+	portWaitingServer, err := getEnvOrViperPort("WAITING_SERVER_PORT", "server.waiting_server_port")
+	if err != nil {
+		return nil, err
+	}
+
+	// Build immutable config struct
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:            port,
-			ReadTimeout:     time.Duration(viper.GetInt("server.read_timeout_secs")) * time.Second,
-			WriteTimeout:    time.Duration(viper.GetInt("server.write_timeout_secs")) * time.Second,
-			IdleTimeout:     time.Duration(viper.GetInt("server.idle_timeout_secs")) * time.Second,
-			ShutDownTimeout: time.Duration(viper.GetInt("server.shutdown_timeout_secs")) * time.Second,
+			Port:              port,
+			WaitingServerPort: portWaitingServer,
+			ReadTimeout:       time.Duration(viper.GetInt("server.read_timeout_secs")) * time.Second,
+			WriteTimeout:      time.Duration(viper.GetInt("server.write_timeout_secs")) * time.Second,
+			IdleTimeout:       time.Duration(viper.GetInt("server.idle_timeout_secs")) * time.Second,
+			ShutDownTimeout:   time.Duration(viper.GetInt("server.shutdown_timeout_secs")) * time.Second,
 		},
 		Data: DataConfig{
 			FilePath:        viper.GetString("data.file_path"),

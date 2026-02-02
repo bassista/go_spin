@@ -1,5 +1,6 @@
 server:
   port: 8080
+  waiting_server_port: 8081
   shutdown_timeout_secs: 5
 data:
   file_path: ./config/data/config.json

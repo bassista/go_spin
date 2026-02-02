@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"syscall"
 
+	"github.com/bassista/go_spin/internal/api/controller"
 	route "github.com/bassista/go_spin/internal/api/route"
 	appctx "github.com/bassista/go_spin/internal/app"
 	"github.com/bassista/go_spin/internal/cache"
@@ -70,6 +71,15 @@ func main() {
 	route.SetupRoutes(r, app)
 	srv := createServer(r, app)
 
+	// Setup and start the secondary waiting server
+	waitingSrv := createWaitingServer(app)
+	go func() {
+		logger.WithComponent("main").Infof("Waiting server will run on port: %d", cfg.Server.WaitingServerPort)
+		if err := waitingSrv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.WaitingServerPort)); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.WithComponent("main").Errorf("Waiting server error: %v", err)
+		}
+	}()
+
 	logger.WithComponent("main").Infof("App will run on port: %d", cfg.Server.Port)
 	if err := srv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.WithComponent("main").Fatal(err)
@@ -99,6 +109,42 @@ func createServer(r *gin.Engine, app *appctx.App) *httpgrace.Server {
 			},
 			func(srv *http.Server) {
 				srv.ErrorLog = log.New(logger.Logger.Writer(), "[http] ", log.LstdFlags)
+			},
+		),
+	)
+	return srv
+}
+
+// createWaitingServer creates a secondary HTTP server dedicated to serving only the waiting page.
+// It exposes a single route GET /:name that triggers RuntimeController.WaitingPage.
+func createWaitingServer(app *appctx.App) *httpgrace.Server {
+	r := gin.New()
+	r.Use(gin.Recovery())
+
+	// Create RuntimeController for the waiting page
+	rc := controller.NewRuntimeController(app.BaseCtx, app.Runtime, app.Cache)
+	r.GET("/:name", rc.WaitingPage)
+
+	slogLogger := slog.New(slog.NewTextHandler(logger.Logger.Writer(), nil))
+
+	srv := httpgrace.NewServer(r,
+		httpgrace.WithTimeout(app.Config.Server.ShutDownTimeout),
+		httpgrace.WithSignals(syscall.SIGTERM, syscall.SIGINT),
+		httpgrace.WithLogger(slogLogger),
+		httpgrace.WithBeforeShutdown(func() {
+			logger.WithComponent("http").Info("Shutting down waiting server....")
+		}),
+		httpgrace.WithServerOptions(
+			httpgrace.WithReadTimeout(app.Config.Server.ReadTimeout),
+			httpgrace.WithWriteTimeout(app.Config.Server.WriteTimeout),
+			httpgrace.WithIdleTimeout(app.Config.Server.IdleTimeout),
+			func(srv *http.Server) {
+				srv.BaseContext = func(_ net.Listener) context.Context {
+					return app.BaseCtx
+				}
+			},
+			func(srv *http.Server) {
+				srv.ErrorLog = log.New(logger.Logger.Writer(), "[waiting-http] ", log.LstdFlags)
 			},
 		),
 	)
