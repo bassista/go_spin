@@ -32,6 +32,11 @@ func (m *MockDockerClient) ContainerStop(ctx context.Context, containerID string
 	return args.Get(0).(client.ContainerStopResult), args.Error(1)
 }
 
+func (m *MockDockerClient) ContainerList(ctx context.Context, options client.ContainerListOptions) (client.ContainerListResult, error) {
+	args := m.Called(ctx, options)
+	return args.Get(0).(client.ContainerListResult), args.Error(1)
+}
+
 func TestNewDockerRuntimeWithClient(t *testing.T) {
 	mockClient := &MockDockerClient{}
 	dr := NewDockerRuntimeWithClient(mockClient)
@@ -204,5 +209,57 @@ func TestDockerRuntime_Stop_Error(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "error stopping container")
 	assert.Contains(t, err.Error(), "stop failed")
+	mockClient.AssertExpectations(t)
+}
+
+func TestDockerRuntime_ListContainers_Success(t *testing.T) {
+	mockClient := &MockDockerClient{}
+	dr := NewDockerRuntimeWithClient(mockClient)
+
+	ctx := context.Background()
+
+	listResult := client.ContainerListResult{
+		Items: []container.Summary{
+			{Names: []string{"/MyApp"}},
+			{Names: []string{"/another-container"}},
+		},
+	}
+
+	mockClient.On("ContainerList", ctx, client.ContainerListOptions{}).Return(listResult, nil)
+
+	names, err := dr.ListContainers(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"MyApp", "another-container"}, names)
+	mockClient.AssertExpectations(t)
+}
+
+func TestDockerRuntime_ListContainers_Empty(t *testing.T) {
+	mockClient := &MockDockerClient{}
+	dr := NewDockerRuntimeWithClient(mockClient)
+
+	ctx := context.Background()
+
+	listResult := client.ContainerListResult{Items: []container.Summary{}}
+
+	mockClient.On("ContainerList", ctx, client.ContainerListOptions{}).Return(listResult, nil)
+
+	names, err := dr.ListContainers(ctx)
+	assert.NoError(t, err)
+	assert.Empty(t, names)
+	mockClient.AssertExpectations(t)
+}
+
+func TestDockerRuntime_ListContainers_Error(t *testing.T) {
+	mockClient := &MockDockerClient{}
+	dr := NewDockerRuntimeWithClient(mockClient)
+
+	ctx := context.Background()
+
+	mockClient.On("ContainerList", ctx, client.ContainerListOptions{}).Return(client.ContainerListResult{}, errors.New("list failed"))
+
+	names, err := dr.ListContainers(ctx)
+	assert.Error(t, err)
+	assert.Nil(t, names)
+	assert.Contains(t, err.Error(), "error listing containers")
 	mockClient.AssertExpectations(t)
 }

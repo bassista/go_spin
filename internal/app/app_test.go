@@ -131,6 +131,14 @@ func (m *mockRuntimeForApp) Stop(ctx context.Context, name string) error {
 	return nil
 }
 
+func (m *mockRuntimeForApp) ListContainers(ctx context.Context) ([]string, error) {
+	names := make([]string, 0, len(m.runningContainers))
+	for n := range m.runningContainers {
+		names = append(names, n)
+	}
+	return names, nil
+}
+
 func TestNew_Success(t *testing.T) {
 	cfg := &config.Config{}
 	repo := &mockRepository{}

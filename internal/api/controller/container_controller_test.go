@@ -65,6 +65,10 @@ func (m *mockContainerRuntimeForContainer) Stop(ctx context.Context, containerNa
 	return nil
 }
 
+func (m *mockContainerRuntimeForContainer) ListContainers(ctx context.Context) ([]string, error) {
+	return []string{}, nil
+}
+
 func TestContainerController_AllContainers(t *testing.T) {
 	active := true
 	running := false

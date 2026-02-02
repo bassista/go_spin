@@ -69,6 +69,17 @@ func (m *MockRuntime) Stop(_ context.Context, name string) error {
 	return nil
 }
 
+// ListContainers returns the list of container names known to the mock runtime.
+func (m *MockRuntime) ListContainers(_ context.Context) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	names := make([]string, 0, len(m.running))
+	for n := range m.running {
+		names = append(names, n)
+	}
+	return names, nil
+}
+
 func TestNewPollingScheduler(t *testing.T) {
 	store := &MockStore{}
 	rt := NewMockRuntime()

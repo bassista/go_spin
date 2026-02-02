@@ -55,3 +55,16 @@ func (m *MemoryRuntime) Stop(_ context.Context, containerName string) error {
 	m.running[containerName] = false
 	return nil
 }
+
+// ListContainers returns the names of containers known to the memory runtime.
+// Names are returned exactly as they are stored (case-sensitive).
+func (m *MemoryRuntime) ListContainers(_ context.Context) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	names := make([]string, 0, len(m.running))
+	for n := range m.running {
+		names = append(names, n)
+	}
+	logger.WithComponent("memory-runtime").Debugf("listing containers: %v", names)
+	return names, nil
+}

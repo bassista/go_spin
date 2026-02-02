@@ -14,6 +14,11 @@ function app() {
         showGroupModal: false,
         showScheduleModal: false,
         
+        // Runtime containers for autocomplete
+        runtimeContainers: [],
+        filteredRuntimeContainers: [],
+        showContainerSuggestions: false,
+        
         // Editing flags
         editingContainer: false,
         editingGroup: false,
@@ -69,7 +74,36 @@ function app() {
             }
         },
         
-        openContainerModal(container = null) {
+        async loadRuntimeContainers() {
+            try {
+                const res = await fetch(`${this.apiBase}/runtime/containers`);
+                if (!res.ok) throw new Error(await res.text());
+                this.runtimeContainers = await res.json();
+                this.filteredRuntimeContainers = [...this.runtimeContainers];
+            } catch (e) {
+                this.showError('Failed to load runtime containers: ' + e.message);
+                this.runtimeContainers = [];
+                this.filteredRuntimeContainers = [];
+            }
+        },
+        
+        filterContainerSuggestions() {
+            const search = this.containerForm.name.toLowerCase();
+            if (search === '') {
+                this.filteredRuntimeContainers = [...this.runtimeContainers];
+            } else {
+                this.filteredRuntimeContainers = this.runtimeContainers.filter(name => 
+                    name.toLowerCase().includes(search)
+                );
+            }
+        },
+        
+        selectContainerName(name) {
+            this.containerForm.name = name;
+            this.showContainerSuggestions = false;
+        },
+        
+        async openContainerModal(container = null) {
             if (container) {
                 this.editingContainer = true;
                 this.containerForm = {
@@ -79,6 +113,7 @@ function app() {
                     running: container.running || false,
                     active: container.active || false
                 };
+                this.showContainerSuggestions = false;
             } else {
                 this.editingContainer = false;
                 this.containerForm = {
@@ -88,6 +123,8 @@ function app() {
                     running: false,
                     active: true
                 };
+                await this.loadRuntimeContainers();
+                this.showContainerSuggestions = false;
             }
             this.showContainerModal = true;
         },

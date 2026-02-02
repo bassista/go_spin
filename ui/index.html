@@ -218,11 +218,43 @@
                     <h3 class="text-lg font-semibold" x-text="editingContainer ? 'Edit Container' : 'Add Container'"></h3>
                 </div>
                 <form @submit.prevent="saveContainer()" class="p-6 space-y-4">
-                    <div>
+                    <div class="relative">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                        <input type="text" x-model="containerForm.name" :disabled="editingContainer" required
-                               class="w-full border rounded px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                               :class="editingContainer ? 'bg-gray-100' : ''">
+                        <template x-if="editingContainer">
+                            <input type="text" x-model="containerForm.name" disabled required
+                                   class="w-full border rounded px-3 py-2 bg-gray-100">
+                        </template>
+                        <template x-if="!editingContainer">
+                            <div class="relative">
+                                <input type="text" x-model="containerForm.name" required
+                                       @input="filterContainerSuggestions()"
+                                       @focus="showContainerSuggestions = true"
+                                       @click="showContainerSuggestions = true"
+                                       autocomplete="off"
+                                       placeholder="Type to search containers..."
+                                       class="w-full border rounded px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                                <div x-show="showContainerSuggestions && filteredRuntimeContainers.length > 0" 
+                                     x-transition
+                                     @click.away="showContainerSuggestions = false"
+                                     class="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                    <template x-for="name in filteredRuntimeContainers" :key="name">
+                                        <button type="button" 
+                                                @click="selectContainerName(name)"
+                                                class="w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none text-sm"
+                                                x-text="name">
+                                        </button>
+                                    </template>
+                                </div>
+                                <div x-show="showContainerSuggestions && filteredRuntimeContainers.length === 0 && runtimeContainers.length > 0"
+                                     class="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-3 text-sm text-gray-500">
+                                    No matching containers found
+                                </div>
+                                <div x-show="showContainerSuggestions && runtimeContainers.length === 0"
+                                     class="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-3 text-sm text-gray-500">
+                                    No containers available from Docker runtime
+                                </div>
+                            </div>
+                        </template>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Friendly Name *</label>

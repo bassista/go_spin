@@ -59,6 +59,43 @@ func TestMemoryRuntime_IsRunning(t *testing.T) {
 	}
 }
 
+func TestMemoryRuntime_ListContainers(t *testing.T) {
+	mr := NewMemoryRuntime()
+	ctx := context.Background()
+
+	// empty initially
+	list, err := mr.ListContainers(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("expected empty list, got %v", list)
+	}
+
+	// add some containers
+	if err := mr.Start(ctx, "Alpha"); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if err := mr.Start(ctx, "beta"); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	list, err = mr.ListContainers(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// verify case-sensitive names present
+	want := map[string]bool{"Alpha": true, "beta": true}
+	if len(list) != len(want) {
+		t.Fatalf("expected %d containers, got %d: %v", len(want), len(list), list)
+	}
+	for _, n := range list {
+		if !want[n] {
+			t.Fatalf("unexpected container name: %s", n)
+		}
+	}
+}
+
 func TestMemoryRuntime_Start(t *testing.T) {
 	mr := NewMemoryRuntime()
 	ctx := context.Background()

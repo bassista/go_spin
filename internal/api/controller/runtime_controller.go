@@ -329,3 +329,13 @@ func (rc *RuntimeController) serveWaitingPage(c *gin.Context, containerName, red
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(http.StatusOK, html)
 }
+
+// ListContainers returns a JSON array with the names of containers present in the runtime.
+func (rc *RuntimeController) ListContainers(c *gin.Context) {
+	names, err := rc.runtime.ListContainers(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, names)
+}

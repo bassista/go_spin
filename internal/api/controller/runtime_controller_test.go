@@ -57,6 +57,16 @@ func (m *mockContainerRuntime) Stop(ctx context.Context, name string) error {
 	return nil
 }
 
+func (m *mockContainerRuntime) ListContainers(ctx context.Context) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	names := make([]string, 0, len(m.runningContainers))
+	for n := range m.runningContainers {
+		names = append(names, n)
+	}
+	return names, nil
+}
+
 // newMockStoreWithContainer creates a mock store with a container
 func newMockStoreWithContainer(name string) *mockContainerStore {
 	return &mockContainerStore{

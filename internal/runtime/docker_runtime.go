@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/bassista/go_spin/internal/logger"
 	"github.com/containerd/errdefs"
@@ -15,6 +16,7 @@ type DockerClient interface {
 	ContainerInspect(ctx context.Context, containerID string, options client.ContainerInspectOptions) (client.ContainerInspectResult, error)
 	ContainerStart(ctx context.Context, containerID string, options client.ContainerStartOptions) (client.ContainerStartResult, error)
 	ContainerStop(ctx context.Context, containerID string, options client.ContainerStopOptions) (client.ContainerStopResult, error)
+	ContainerList(ctx context.Context, options client.ContainerListOptions) (client.ContainerListResult, error)
 }
 
 type DockerRuntime struct {
@@ -76,4 +78,28 @@ func (d *DockerRuntime) Stop(ctx context.Context, containerName string) error {
 	}
 	logger.WithComponent("docker").Debugf("container stopped successfully: %s", containerName)
 	return nil
+}
+
+// ListContainers returns a list of container names from the Docker daemon.
+// Names are returned exactly as stored (case-sensitive).
+func (d *DockerRuntime) ListContainers(ctx context.Context) ([]string, error) {
+	logger.WithComponent("docker").Debugf("listing containers")
+	result, err := d.cli.ContainerList(ctx, client.ContainerListOptions{})
+	if err != nil {
+		logger.WithComponent("docker").Errorf("failed to list containers: %v", err)
+		return nil, fmt.Errorf("error listing containers: %w", err)
+	}
+	names := make([]string, 0, len(result.Items))
+	for _, c := range result.Items {
+		if len(c.Names) > 0 {
+			// Container names are prefixed with '/', strip it
+			name := c.Names[0]
+			if strings.HasPrefix(name, "/") {
+				name = name[1:]
+			}
+			names = append(names, name)
+		}
+	}
+	logger.WithComponent("docker").Debugf("listed %d containers: %v", len(names), names)
+	return names, nil
 }
