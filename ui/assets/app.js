@@ -50,6 +50,11 @@ function app() {
         // API base URL (same origin)
         apiBase: '',
         
+        // Server configuration
+        configuration: {
+            baseUrl: ''
+        },
+        
         // Initialize
         async init() {
             await this.loadAll();
@@ -59,8 +64,43 @@ function app() {
             await Promise.all([
                 this.loadContainers(),
                 this.loadGroups(),
-                this.loadSchedules()
+                this.loadSchedules(),
+                this.loadConfiguration()
             ]);
+        },
+        
+        async loadConfiguration() {
+            try {
+                const res = await fetch(`${this.apiBase}/configuration`);
+                if (!res.ok) throw new Error(await res.text());
+                this.configuration = await res.json();
+            } catch (e) {
+                this.showError('Failed to load configuration: ' + e.message);
+            }
+        },
+        
+        // Generate URL based on container name and baseUrl configuration
+        generateContainerUrl(name) {
+            const baseUrl = this.configuration.baseUrl || '';
+            
+            if (!baseUrl || baseUrl.trim() === '') {
+                // If baseUrl is empty, use localhost
+                return `http://localhost/${name}`;
+            }
+            
+            if (baseUrl.includes('$1')) {
+                // If baseUrl contains $1 token, replace it with the container name
+                return baseUrl.replace('$1', name);
+            }
+            
+            // Otherwise, append the name to baseUrl, avoiding double slashes
+            let url = baseUrl;
+            if (!url.endsWith('/')) {
+                url += '/';
+            }
+            url += name;
+            // Remove any double slashes (except after protocol)
+            return url.replace(/([^:])(\/\/+)/g, '$1/');
         },
         
         // ==================== CONTAINERS ====================
@@ -100,6 +140,10 @@ function app() {
         
         selectContainerName(name) {
             this.containerForm.name = name;
+            // Auto-populate friendly_name with the same value
+            this.containerForm.friendly_name = name;
+            // Auto-populate URL based on configuration
+            this.containerForm.url = this.generateContainerUrl(name);
             this.showContainerSuggestions = false;
         },
         

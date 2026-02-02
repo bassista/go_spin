@@ -90,7 +90,7 @@ func (a *App) StartWatchers() {
 	a.persistDone = cache.StartPersistenceScheduler(a.BaseCtx, a.Cache, a.Repo, a.Config.Data.PersistInterval)
 	logger.WithComponent("app").Debugf("persistence scheduler started")
 
-	if a.Config.Misc.SchedulingEnabled {
+	if a.Config.Data.SchedulingEnabled {
 		loc := time.Local
 		if a.Config.Misc.SchedulingTZ != "" && a.Config.Misc.SchedulingTZ != "Local" {
 			l, err := time.LoadLocation(a.Config.Misc.SchedulingTZ)
@@ -101,7 +101,7 @@ func (a *App) StartWatchers() {
 		}
 
 		logger.WithComponent("app").Debugf("starting polling scheduler with timezone: %v", loc)
-		s := scheduler.NewPollingScheduler(a.Cache, a.Runtime, a.Config.Misc.SchedulingPoll, loc)
+		s := scheduler.NewPollingScheduler(a.Cache, a.Runtime, a.Config.Data.SchedulingPoll, loc)
 		s.Start(a.BaseCtx)
 	}
 

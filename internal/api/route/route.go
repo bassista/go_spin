@@ -10,7 +10,7 @@ import (
 
 func SetupRoutes(r *gin.Engine, appCtx *app.App) {
 	// Apply CORS middleware globally
-	r.Use(middleware.CORSMiddleware(appCtx.Config.Misc.CORSAllowedOrigins))
+	r.Use(middleware.CORSMiddleware(appCtx.Config.Server.CORSAllowedOrigins))
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -31,12 +31,13 @@ func SetupRoutes(r *gin.Engine, appCtx *app.App) {
 	// All Public APIs
 	publicRouter := r.Group("")
 
-	timeout := appCtx.Config.Misc.RequestTimeout
+	timeout := appCtx.Config.Server.RequestTimeout
 
 	NewContainerRouter(appCtx.BaseCtx, timeout, publicRouter, appCtx.Cache, appCtx.Runtime)
 	NewGroupRouter(timeout, publicRouter, appCtx.Cache)
 	NewScheduleRouter(timeout, publicRouter, appCtx.Cache)
 	NewRuntimeRouter(appCtx.BaseCtx, timeout, publicRouter, appCtx.Runtime, appCtx.Cache)
+	NewConfigurationRouter(timeout, publicRouter, appCtx.Config)
 
 	// UI static files
 	NewUIRouter(r)

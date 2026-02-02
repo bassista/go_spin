@@ -9,24 +9,24 @@ import (
 func TestConfig_Validate_Valid(t *testing.T) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:            8080,
-			ReadTimeout:     10 * time.Second,
-			WriteTimeout:    10 * time.Second,
-			IdleTimeout:     120 * time.Second,
-			ShutDownTimeout: 5 * time.Second,
+			Port:               8080,
+			ReadTimeout:        10 * time.Second,
+			WriteTimeout:       10 * time.Second,
+			IdleTimeout:        120 * time.Second,
+			ShutDownTimeout:    5 * time.Second,
+			RequestTimeout:     1000 * time.Millisecond,
+			CORSAllowedOrigins: "*",
 		},
 		Data: DataConfig{
-			FilePath:        "/tmp/config.json",
-			PersistInterval: 5 * time.Second,
+			FilePath:          "/tmp/config.json",
+			PersistInterval:   5 * time.Second,
+			SchedulingEnabled: true,
+			SchedulingPoll:    30 * time.Second,
 		},
 		Misc: MiscConfig{
-			GinMode:            "release",
-			SchedulingEnabled:  true,
-			SchedulingPoll:     30 * time.Second,
-			RequestTimeout:     1000 * time.Millisecond,
-			SchedulingTZ:       "Local",
-			RuntimeType:        "docker",
-			CORSAllowedOrigins: "*",
+			GinMode:      "release",
+			SchedulingTZ: "Local",
+			RuntimeType:  "docker",
 		},
 	}
 
@@ -43,14 +43,15 @@ func TestConfig_Validate_EmptyFilePath(t *testing.T) {
 			WriteTimeout:    10 * time.Second,
 			IdleTimeout:     120 * time.Second,
 			ShutDownTimeout: 5 * time.Second,
+			RequestTimeout:  1000 * time.Millisecond,
 		},
 		Data: DataConfig{
 			FilePath:        "",
 			PersistInterval: 5 * time.Second,
+			SchedulingPoll:  30 * time.Second,
 		},
 		Misc: MiscConfig{
-			SchedulingPoll: 30 * time.Second,
-			SchedulingTZ:   "Local",
+			SchedulingTZ: "Local",
 		},
 	}
 
@@ -79,14 +80,15 @@ func TestConfig_Validate_InvalidPort(t *testing.T) {
 					WriteTimeout:    10 * time.Second,
 					IdleTimeout:     120 * time.Second,
 					ShutDownTimeout: 5 * time.Second,
+					RequestTimeout:  1000 * time.Millisecond,
 				},
 				Data: DataConfig{
 					FilePath:        "/tmp/config.json",
 					PersistInterval: 5 * time.Second,
+					SchedulingPoll:  30 * time.Second,
 				},
 				Misc: MiscConfig{
-					SchedulingPoll: 30 * time.Second,
-					SchedulingTZ:   "Local",
+					SchedulingTZ: "Local",
 				},
 			}
 
@@ -106,14 +108,15 @@ func TestConfig_Validate_InvalidPersistInterval(t *testing.T) {
 			WriteTimeout:    10 * time.Second,
 			IdleTimeout:     120 * time.Second,
 			ShutDownTimeout: 5 * time.Second,
+			RequestTimeout:  1000 * time.Millisecond,
 		},
 		Data: DataConfig{
 			FilePath:        "/tmp/config.json",
 			PersistInterval: 0,
+			SchedulingPoll:  30 * time.Second,
 		},
 		Misc: MiscConfig{
-			SchedulingPoll: 30 * time.Second,
-			SchedulingTZ:   "Local",
+			SchedulingTZ: "Local",
 		},
 	}
 
@@ -146,14 +149,15 @@ func TestConfig_Validate_InvalidTimeouts(t *testing.T) {
 					WriteTimeout:    tt.writeTimeout,
 					IdleTimeout:     tt.idleTimeout,
 					ShutDownTimeout: tt.shutdownTimeout,
+					RequestTimeout:  1000 * time.Millisecond,
 				},
 				Data: DataConfig{
 					FilePath:        "/tmp/config.json",
 					PersistInterval: 5 * time.Second,
+					SchedulingPoll:  30 * time.Second,
 				},
 				Misc: MiscConfig{
-					SchedulingPoll: 30 * time.Second,
-					SchedulingTZ:   "Local",
+					SchedulingTZ: "Local",
 				},
 			}
 
@@ -173,14 +177,15 @@ func TestConfig_Validate_InvalidSchedulingPoll(t *testing.T) {
 			WriteTimeout:    10 * time.Second,
 			IdleTimeout:     120 * time.Second,
 			ShutDownTimeout: 5 * time.Second,
+			RequestTimeout:  1000 * time.Millisecond,
 		},
 		Data: DataConfig{
 			FilePath:        "/tmp/config.json",
 			PersistInterval: 5 * time.Second,
+			SchedulingPoll:  0,
 		},
 		Misc: MiscConfig{
-			SchedulingPoll: 0,
-			SchedulingTZ:   "Local",
+			SchedulingTZ: "Local",
 		},
 	}
 
@@ -198,14 +203,15 @@ func TestConfig_Validate_InvalidTimezone(t *testing.T) {
 			WriteTimeout:    10 * time.Second,
 			IdleTimeout:     120 * time.Second,
 			ShutDownTimeout: 5 * time.Second,
+			RequestTimeout:  1000 * time.Millisecond,
 		},
 		Data: DataConfig{
 			FilePath:        "/tmp/config.json",
 			PersistInterval: 5 * time.Second,
+			SchedulingPoll:  30 * time.Second,
 		},
 		Misc: MiscConfig{
-			SchedulingPoll: 30 * time.Second,
-			SchedulingTZ:   "Invalid/Timezone",
+			SchedulingTZ: "Invalid/Timezone",
 		},
 	}
 
@@ -227,15 +233,15 @@ func TestConfig_Validate_ValidTimezones(t *testing.T) {
 					WriteTimeout:    10 * time.Second,
 					IdleTimeout:     120 * time.Second,
 					ShutDownTimeout: 5 * time.Second,
+					RequestTimeout:  1000 * time.Millisecond,
 				},
 				Data: DataConfig{
 					FilePath:        "/tmp/config.json",
 					PersistInterval: 5 * time.Second,
+					SchedulingPoll:  30 * time.Second,
 				},
 				Misc: MiscConfig{
-					SchedulingPoll: 30 * time.Second,
-					RequestTimeout: 1000 * time.Millisecond,
-					SchedulingTZ:   tz,
+					SchedulingTZ: tz,
 				},
 			}
 

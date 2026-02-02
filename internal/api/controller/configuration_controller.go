@@ -1,0 +1,33 @@
+package controller
+
+import (
+	"net/http"
+
+	"github.com/bassista/go_spin/internal/config"
+	"github.com/gin-gonic/gin"
+)
+
+// ConfigurationResponse represents the configuration response structure for the API.
+type ConfigurationResponse struct {
+	BaseUrl string `json:"baseUrl"`
+}
+
+// ConfigurationController handles configuration-related API endpoints.
+type ConfigurationController struct {
+	config *config.Config
+}
+
+// NewConfigurationController creates a new ConfigurationController.
+func NewConfigurationController(cfg *config.Config) *ConfigurationController {
+	return &ConfigurationController{
+		config: cfg,
+	}
+}
+
+// GetConfiguration returns the application configuration for the frontend.
+func (cc *ConfigurationController) GetConfiguration(c *gin.Context) {
+	response := ConfigurationResponse{
+		BaseUrl: cc.config.Data.BaseUrl,
+	}
+	c.JSON(http.StatusOK, response)
+}

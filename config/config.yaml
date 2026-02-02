@@ -5,6 +5,7 @@ server:
 data:
   file_path: ./config/data/config.json
   persist_interval_secs: 5
+  base_url: "http://localhost/"  # Base URL for container URL generation, supports $1 token
 misc:
   gin_mode: debug 
   runtime_type: docker  # possible values: memory, docker

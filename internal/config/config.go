@@ -23,28 +23,29 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port              int
-	WaitingServerPort int
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
-	ShutDownTimeout   time.Duration
+	Port               int
+	WaitingServerPort  int
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
+	ShutDownTimeout    time.Duration
+	RequestTimeout     time.Duration
+	CORSAllowedOrigins string // CORS allowed origins, default "*"
 }
 
 type DataConfig struct {
-	FilePath        string
-	PersistInterval time.Duration
+	FilePath          string
+	PersistInterval   time.Duration
+	SchedulingEnabled bool
+	SchedulingPoll    time.Duration
+	BaseUrl           string
 }
 
 type MiscConfig struct {
-	GinMode            string
-	SchedulingEnabled  bool
-	SchedulingPoll     time.Duration
-	RequestTimeout     time.Duration
-	SchedulingTZ       string
-	RuntimeType        string // "docker" o "memory"
-	CORSAllowedOrigins string // CORS allowed origins, default "*"
-	LogLevel           string // "debug", "info", "warn", "error", default "info"
+	GinMode      string
+	SchedulingTZ string
+	RuntimeType  string // "docker" o "memory"
+	LogLevel     string // "debug", "info", "warn", "error", default "info"
 }
 
 // LoadConfig loads configuration from file, env vars and validates required fields.
@@ -68,15 +69,17 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("server.write_timeout_secs", 10)
 	viper.SetDefault("server.idle_timeout_secs", 120)
 	viper.SetDefault("server.shutdown_timeout_secs", 5)
+	viper.SetDefault("server.request_timeout_millis", 1000)
+	viper.SetDefault("server.cors_allowed_origins", "*")
+
 	viper.SetDefault("data.file_path", confPath+"/data/config.json")
 	viper.SetDefault("data.persist_interval_secs", 5)
+	viper.SetDefault("data.scheduling_enabled", true)
+	viper.SetDefault("data.scheduling_poll_interval_secs", 30)
+	viper.SetDefault("data.base_url", "http://localhost/")
 	viper.SetDefault("misc.gin_mode", "release")
-	viper.SetDefault("misc.scheduling_enabled", true)
-	viper.SetDefault("misc.request_timeout_millis", 1000)
-	viper.SetDefault("misc.scheduling_poll_interval_secs", 30)
 	viper.SetDefault("misc.scheduling_timezone", "Local")
 	viper.SetDefault("misc.runtime_type", "docker")
-	viper.SetDefault("misc.cors_allowed_origins", "*")
 	viper.SetDefault("misc.log_level", "info")
 
 	// Environment variables automatically override config file values
@@ -109,31 +112,32 @@ func LoadConfig() (*Config, error) {
 	// Build immutable config struct
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:              port,
-			WaitingServerPort: portWaitingServer,
-			ReadTimeout:       time.Duration(viper.GetInt("server.read_timeout_secs")) * time.Second,
-			WriteTimeout:      time.Duration(viper.GetInt("server.write_timeout_secs")) * time.Second,
-			IdleTimeout:       time.Duration(viper.GetInt("server.idle_timeout_secs")) * time.Second,
-			ShutDownTimeout:   time.Duration(viper.GetInt("server.shutdown_timeout_secs")) * time.Second,
+			Port:               port,
+			WaitingServerPort:  portWaitingServer,
+			ReadTimeout:        time.Duration(viper.GetInt("server.read_timeout_secs")) * time.Second,
+			WriteTimeout:       time.Duration(viper.GetInt("server.write_timeout_secs")) * time.Second,
+			IdleTimeout:        time.Duration(viper.GetInt("server.idle_timeout_secs")) * time.Second,
+			ShutDownTimeout:    time.Duration(viper.GetInt("server.shutdown_timeout_secs")) * time.Second,
+			RequestTimeout:     time.Duration(viper.GetInt("server.request_timeout_millis")) * time.Millisecond,
+			CORSAllowedOrigins: viper.GetString("server.cors_allowed_origins"),
 		},
 		Data: DataConfig{
-			FilePath:        viper.GetString("data.file_path"),
-			PersistInterval: time.Duration(viper.GetInt("data.persist_interval_secs")) * time.Second,
+			FilePath:          viper.GetString("data.file_path"),
+			PersistInterval:   time.Duration(viper.GetInt("data.persist_interval_secs")) * time.Second,
+			SchedulingEnabled: viper.GetBool("data.scheduling_enabled"),
+			SchedulingPoll:    time.Duration(viper.GetInt("data.scheduling_poll_interval_secs")) * time.Second,
+			BaseUrl:           viper.GetString("data.base_url"),
 		},
 		Misc: MiscConfig{
-			GinMode:            viper.GetString("misc.gin_mode"),
-			SchedulingEnabled:  viper.GetBool("misc.scheduling_enabled"),
-			SchedulingPoll:     time.Duration(viper.GetInt("misc.scheduling_poll_interval_secs")) * time.Second,
-			RequestTimeout:     time.Duration(viper.GetInt("misc.request_timeout_millis")) * time.Millisecond,
-			SchedulingTZ:       viper.GetString("misc.scheduling_timezone"),
-			RuntimeType:        viper.GetString("misc.runtime_type"),
-			CORSAllowedOrigins: viper.GetString("misc.cors_allowed_origins"),
-			LogLevel:           viper.GetString("misc.log_level"),
+			GinMode:      viper.GetString("misc.gin_mode"),
+			SchedulingTZ: viper.GetString("misc.scheduling_timezone"),
+			RuntimeType:  viper.GetString("misc.runtime_type"),
+			LogLevel:     viper.GetString("misc.log_level"),
 		},
 	}
 
 	logger.WithComponent("config").Debugf("configuration loaded: port=%d, gin_mode=%s, runtime_type=%s, scheduling_enabled=%v, scheduling_tz=%s",
-		cfg.Server.Port, cfg.Misc.GinMode, cfg.Misc.RuntimeType, cfg.Misc.SchedulingEnabled, cfg.Misc.SchedulingTZ)
+		cfg.Server.Port, cfg.Misc.GinMode, cfg.Misc.RuntimeType, cfg.Data.SchedulingEnabled, cfg.Misc.SchedulingTZ)
 
 	// Fail-fast validation
 	if err := cfg.validate(); err != nil {
@@ -177,6 +181,9 @@ func (c *Config) validate() error {
 	if c.Data.PersistInterval <= 0 {
 		return fmt.Errorf("data.persist_interval_secs must be positive")
 	}
+	if c.Data.SchedulingPoll <= 0 {
+		return fmt.Errorf("data.scheduling_poll_interval_secs must be positive")
+	}
 	if c.Server.Port < 1 || c.Server.Port > 65535 {
 		return fmt.Errorf("server.port must be a valid TCP port (1-65535)")
 	}
@@ -192,11 +199,8 @@ func (c *Config) validate() error {
 	if c.Server.ReadTimeout <= 0 {
 		return fmt.Errorf("server.read_timeout_secs must be positive")
 	}
-	if c.Misc.SchedulingPoll <= 0 {
-		return fmt.Errorf("misc.scheduling_poll_interval_secs must be positive")
-	}
-	if c.Misc.RequestTimeout <= 0 {
-		return fmt.Errorf("misc.request_timeout_millis must be positive")
+	if c.Server.RequestTimeout <= 0 {
+		return fmt.Errorf("server.request_timeout_millis must be positive")
 	}
 	if c.Misc.SchedulingTZ != "" && c.Misc.SchedulingTZ != "Local" {
 		if _, err := time.LoadLocation(c.Misc.SchedulingTZ); err != nil {

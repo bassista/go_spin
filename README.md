@@ -59,6 +59,7 @@ server:
 data:
   file_path: ./config/data/config.json
   persist_interval_secs: 5
+  base_url: "http://localhost/"  # Base URL for container URL generation, supports $1 token
 
 misc:
   gin_mode: release              # "debug" or "release"
@@ -145,6 +146,23 @@ GO_SPIN_MISC_RUNTIME_TYPE=memory
 | POST | `/runtime/:name/start` | Start container |
 | POST | `/runtime/:name/stop` | Stop container |
 | GET | `/runtime/:name/waiting` | Serve waiting HTML page for a container or group (starts if not running) |
+
+### Configuration
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/configuration` | Get application configuration for frontend |
+
+**Response:**
+```json
+{
+  "baseUrl": "https://$1.my.domain.com"
+}
+```
+
+The `baseUrl` field is used by the Web UI to auto-generate container URLs when selecting a container name:
+- If `baseUrl` is empty → `http://localhost/{name}`
+- If `baseUrl` does not contain `$1` → `{baseUrl}/{name}` (removes double slashes)
+- If `baseUrl` contains `$1` → replaces `$1` with the container name (e.g., `https://$1.my.domain.com` → `https://Deluge.my.domain.com`)
 
 #### `/runtime/:name/waiting` endpoint
 Returns an HTML page (text/html) with a spinner and an automatic redirect when the container/group is ready.

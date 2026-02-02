@@ -304,8 +304,7 @@ func TestApp_ContextCancellation(t *testing.T) {
 
 func TestApp_StartWatchers_Success(t *testing.T) {
 	cfg := &config.Config{
-		Data: config.DataConfig{PersistInterval: 10},
-		Misc: config.MiscConfig{SchedulingEnabled: false},
+		Data: config.DataConfig{PersistInterval: 10, SchedulingEnabled: false},
 	}
 	repo := &mockRepository{}
 	store := &mockAppStore{}
