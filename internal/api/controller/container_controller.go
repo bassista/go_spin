@@ -21,7 +21,7 @@ type ContainerController struct {
 }
 
 // NewContainerController creates a new ContainerController with the given cache store.
-func NewContainerController(store cache.ContainerStore, runtime runtime.ContainerRuntime, ctx context.Context) *ContainerController {
+func NewContainerController(ctx context.Context, store cache.ContainerStore, runtime runtime.ContainerRuntime) *ContainerController {
 	v := validator.New()
 	service := &ContainerCrudService{Store: store, Runtime: runtime, Ctx: ctx}
 	validator := &ContainerCrudValidator{validator: v}

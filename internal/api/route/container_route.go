@@ -14,7 +14,7 @@ import (
 func NewContainerRouter(ctx context.Context, timeout time.Duration, group *gin.RouterGroup, store cache.ContainerStore, runtime runtime.ContainerRuntime) {
 	group.Use(middleware.RequestTimeout(timeout))
 
-	cc := controller.NewContainerController(store, runtime, ctx)
+	cc := controller.NewContainerController(ctx, store, runtime)
 
 	group.GET("containers", cc.AllContainers)
 	group.POST("container", cc.CreateOrUpdateContainer)
