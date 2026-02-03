@@ -110,10 +110,10 @@
                                 <td class="px-4 py-3 font-medium" x-text="container.name"></td>
                                 <td :class="{ 'hidden': !showMetaColumns }" class="px-4 py-3" x-text="container.friendly_name"></td>
                                 <td class="px-4 py-3 hidden lg:table-cell">
-                                    <a :href="container.url" target="_blank" class="text-blue-500 hover:underline" x-text="container.url"></a>
+                                    <a @click.stop :href="container.url" target="_blank" class="text-blue-500 hover:underline" x-text="container.url"></a>
                                 </td>
                                 <td class="px-4 py-3 hidden lg:table-cell">
-                                    <a x-show="generateSpinUpUrl(container.friendly_name)" :href="generateSpinUpUrl(container.friendly_name)" target="_blank" class="text-blue-500 hover:underline" x-text="generateSpinUpUrl(container.friendly_name)"></a>
+                                    <a x-show="generateSpinUpUrl(container.friendly_name)" @click.stop :href="generateSpinUpUrl(container.friendly_name)" target="_blank" class="text-blue-500 hover:underline" x-text="generateSpinUpUrl(container.friendly_name)"></a>
                                     <span x-show="!generateSpinUpUrl(container.friendly_name)" class="text-gray-400">-</span>
                                 </td>
                                 <td :class="{ 'hidden': !showMetaColumns }" class="px-4 py-3">
@@ -158,24 +158,24 @@
                         <span class="font-medium">Name</span>
                         <span x-text="detailsContainer.name"></span>
                     </div>
-                    <div class="flex justify-between" :class="{ 'hidden': !showMetaColumns }">
+                    <div class="flex justify-between">
                         <span class="font-medium">Friendly Name</span>
                         <span x-text="detailsContainer.friendly_name"></span>
                     </div>
                     <div class="flex justify-between">
                         <span class="font-medium">URL</span>
-                        <a :href="detailsContainer.url" target="_blank" class="text-blue-500 hover:underline" x-text="detailsContainer.url"></a>
+                        <a @click.stop :href="detailsContainer.url" target="_blank" class="text-blue-500 hover:underline" x-text="detailsContainer.url"></a>
                     </div>
-                    <div class="flex justify-between hidden lg:flex">
+                    <div class="flex justify-between">
                         <span class="font-medium">SpinUp</span>
                         <template x-if="generateSpinUpUrl(detailsContainer.friendly_name)">
-                            <a :href="generateSpinUpUrl(detailsContainer.friendly_name)" target="_blank" class="text-blue-500 hover:underline" x-text="generateSpinUpUrl(detailsContainer.friendly_name)"></a>
+                            <a @click.stop :href="generateSpinUpUrl(detailsContainer.friendly_name)" target="_blank" class="text-blue-500 hover:underline" x-text="generateSpinUpUrl(detailsContainer.friendly_name)"></a>
                         </template>
                         <template x-if="!generateSpinUpUrl(detailsContainer.friendly_name)">
                             <span class="text-gray-400">-</span>
                         </template>
                     </div>
-                    <div class="flex justify-between" :class="{ 'hidden': !showMetaColumns }">
+                    <div class="flex justify-between">
                         <span class="font-medium">Active</span>
                         <span x-text="detailsContainer.active ? 'Yes' : 'No'"></span>
                     </div>
@@ -183,11 +183,11 @@
                         <span class="font-medium">Running</span>
                         <span x-text="detailsContainer.running ? 'Running' : 'Stopped'"></span>
                     </div>
-                    <div class="flex justify-between" :class="{ 'hidden': !showStatsColumns }">
+                    <div class="flex justify-between">
                         <span class="font-medium">CPU %</span>
                         <span x-text="getContainerCpu(detailsContainer.name).toFixed(1)"></span>
                     </div>
-                    <div class="flex justify-between" :class="{ 'hidden': !showStatsColumns }">
+                    <div class="flex justify-between">
                         <span class="font-medium">MEM (MB)</span>
                         <span x-text="getContainerMem(detailsContainer.name).toFixed(1)"></span>
                     </div>
