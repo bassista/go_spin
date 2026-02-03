@@ -77,6 +77,9 @@ func TestGroupController_AllGroups(t *testing.T) {
 	active := true
 	store := &mockGroupStore{
 		doc: repository.DataDocument{
+			Containers: []repository.Container{
+				{Name: "c1"},
+			},
 			Groups: []repository.Group{
 				{Name: "group1", Container: []string{"c1", "c2"}, Active: &active},
 				{Name: "group2", Container: []string{"c3"}, Active: &active},
@@ -106,6 +109,13 @@ func TestGroupController_AllGroups(t *testing.T) {
 
 	if len(groups) != 2 {
 		t.Errorf("expected 2 groups, got %d", len(groups))
+	}
+	// After sanitization: group1 should keep only c1, group2 should have no containers
+	if len(groups[0].Container) != 1 || groups[0].Container[0] != "c1" {
+		t.Errorf("expected group1 to contain only c1, got %v", groups[0].Container)
+	}
+	if len(groups[1].Container) != 0 {
+		t.Errorf("expected group2 to have no containers after sanitization, got %v", groups[1].Container)
 	}
 }
 

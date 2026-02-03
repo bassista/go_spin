@@ -29,6 +29,11 @@ function app() {
         showContainerModal: false,
         showGroupModal: false,
         showScheduleModal: false,
+        // Confirmation modal
+        showConfirmModal: false,
+        confirmTitle: '',
+        confirmMessage: '',
+        _confirmResolve: null,
         // Details modal for a container (read-only)
         showContainerDetailsModal: false,
         detailsContainer: {
@@ -461,7 +466,8 @@ function app() {
         },
         
         async deleteContainer(name) {
-            if (!confirm(`Delete container "${name}"?`)) return;
+            const ok = await this.confirmPromise('Delete container', `Delete container "${name}"?`);
+            if (!ok) return;
             try {
                 const res = await fetch(`${this.apiBase}/container/${encodeURIComponent(name)}`, {
                     method: 'DELETE'
@@ -575,7 +581,8 @@ function app() {
         },
         
         async deleteGroup(name) {
-            if (!confirm(`Delete group "${name}"?`)) return;
+            const ok = await this.confirmPromise('Delete group', `Delete group "${name}"?`);
+            if (!ok) return;
             try {
                 const res = await fetch(`${this.apiBase}/group/${encodeURIComponent(name)}`, {
                     method: 'DELETE'
@@ -658,6 +665,21 @@ function app() {
             }
             this.showScheduleModal = true;
         },
+
+        // When the schedule target type changes, pick a sensible default target
+        onScheduleTargetTypeChange() {
+            // reset target first
+            this.scheduleForm.target = '';
+            if (this.scheduleForm.targetType === 'container') {
+                if (this.containers && this.containers.length > 0) {
+                    this.scheduleForm.target = this.containers[0].name;
+                }
+            } else if (this.scheduleForm.targetType === 'group') {
+                if (this.groups && this.groups.length > 0) {
+                    this.scheduleForm.target = this.groups[0].name;
+                }
+            }
+        },
         
         generateId() {
             return `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -734,7 +756,8 @@ function app() {
         },
         
         async deleteSchedule(id) {
-            if (!confirm(`Delete schedule "${id}"?`)) return;
+            const ok = await this.confirmPromise('Delete schedule', `Delete schedule "${id}"?`);
+            if (!ok) return;
             try {
                 const res = await fetch(`${this.apiBase}/schedule/${encodeURIComponent(id)}`, {
                     method: 'DELETE'
@@ -746,8 +769,39 @@ function app() {
                 this.showError('Failed to delete schedule: ' + e.message);
             }
         },
+
+        // Opens a confirm modal and returns a Promise that resolves to true if confirmed
+        confirmPromise(title, message) {
+            return new Promise((resolve) => {
+                this.confirmTitle = title || 'Confirm';
+                this.confirmMessage = message || '';
+                this.showConfirmModal = true;
+                this._confirmResolve = (ok) => {
+                    this.showConfirmModal = false;
+                    // small timeout to allow modal close transition
+                    setTimeout(() => {
+                        this._confirmResolve = null;
+                        resolve(!!ok);
+                    }, 50);
+                };
+            });
+        },
         
         // ==================== UTILITIES ====================
+        // Return true if container with given name is currently running
+        isContainerRunning(name) {
+            const c = this.containers.find(x => x.name === name);
+            return !!(c && c.running);
+        },
+
+        // Truncate a string to a given character limit (adds '...' when truncated)
+        truncate(s, limit = 20) {
+            if (!s) return '';
+            const n = Number(limit) || 20;
+            if (s.length <= n) return s;
+            if (n <= 3) return s.slice(0, n);
+            return s.slice(0, n - 3) + '...';
+        },
         showError(msg) {
             this.error = msg;
             this.success = '';

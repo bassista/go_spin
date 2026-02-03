@@ -214,6 +214,13 @@ func TestStore_RemoveContainer_Success(t *testing.T) {
 	if !store.IsDirty() {
 		t.Error("expected store to be dirty after RemoveContainer")
 	}
+
+	// The container should be removed from any groups that referenced it
+	if len(result.Groups) != 1 {
+		t.Errorf("expected 1 group to remain, got %d", len(result.Groups))
+	} else if len(result.Groups[0].Container) != 0 {
+		t.Errorf("expected group to have no containers after removal, got %d", len(result.Groups[0].Container))
+	}
 }
 
 func TestStore_RemoveContainer_NotFound(t *testing.T) {

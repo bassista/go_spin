@@ -171,6 +171,19 @@ func (s *Store) RemoveContainer(name string) (repository.DataDocument, error) {
 	}
 	s.data.Schedules = newSchedules
 
+	// Remove container references from all groups
+	for gi := range s.data.Groups {
+		newContainers := make([]string, 0, len(s.data.Groups[gi].Container))
+		for _, cname := range s.data.Groups[gi].Container {
+			if cname == name {
+				logger.WithComponent("cache").Debugf("removing container %s from group %s", name, s.data.Groups[gi].Name)
+				continue
+			}
+			newContainers = append(newContainers, cname)
+		}
+		s.data.Groups[gi].Container = newContainers
+	}
+
 	return cloneData(s.data)
 }
 
