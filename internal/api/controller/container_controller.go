@@ -161,7 +161,7 @@ func (cc *ContainerController) Ready(c *gin.Context) {
 		_ = resp.Body.Close()
 	}()
 
-	isContainerUrlReady := resp.StatusCode == http.StatusOK
+	isContainerUrlReady := resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPermanentRedirect || resp.StatusCode == http.StatusTemporaryRedirect
 	logger.WithComponent("container-controller").Debugf("GET /container/%s/ready handled with status: %v", name, isContainerUrlReady)
 	c.JSON(http.StatusOK, gin.H{"ready": isContainerUrlReady})
 }
