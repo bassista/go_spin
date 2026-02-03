@@ -11,6 +11,7 @@ import (
 
 	"github.com/bassista/go_spin/internal/cache"
 	"github.com/bassista/go_spin/internal/repository"
+	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/gin-gonic/gin"
 )
 
@@ -67,6 +68,10 @@ func (m *mockContainerRuntimeForContainer) Stop(ctx context.Context, containerNa
 
 func (m *mockContainerRuntimeForContainer) ListContainers(ctx context.Context) ([]string, error) {
 	return []string{}, nil
+}
+
+func (m *mockContainerRuntimeForContainer) Stats(ctx context.Context, containerName string) (runtime.ContainerStats, error) {
+	return runtime.ContainerStats{}, nil
 }
 
 func TestContainerController_AllContainers(t *testing.T) {
@@ -289,6 +294,9 @@ func (m *mockRuntime) IsRunning(ctx context.Context, containerName string) (bool
 func (m *mockRuntime) Start(ctx context.Context, containerName string) error { return nil }
 func (m *mockRuntime) Stop(ctx context.Context, containerName string) error  { return nil }
 func (m *mockRuntime) ListContainers(ctx context.Context) ([]string, error)  { return []string{}, nil }
+func (m *mockRuntime) Stats(ctx context.Context, containerName string) (runtime.ContainerStats, error) {
+	return runtime.ContainerStats{}, nil
+}
 
 func TestContainerController_Ready_MissingName(t *testing.T) {
 	store := &mockContainerStore{}

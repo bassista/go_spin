@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bassista/go_spin/internal/repository"
+	"github.com/bassista/go_spin/internal/runtime"
 )
 
 func boolPtr(b bool) *bool {
@@ -78,6 +79,11 @@ func (m *MockRuntime) ListContainers(_ context.Context) ([]string, error) {
 		names = append(names, n)
 	}
 	return names, nil
+}
+
+// Stats returns zero stats for the mock runtime.
+func (m *MockRuntime) Stats(_ context.Context, containerName string) (runtime.ContainerStats, error) {
+	return runtime.ContainerStats{}, nil
 }
 
 func TestNewPollingScheduler(t *testing.T) {

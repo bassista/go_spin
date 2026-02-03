@@ -78,6 +78,10 @@ func (m *mockContainerRuntime) ListContainers(_ context.Context) ([]string, erro
 	return names, nil
 }
 
+func (m *mockContainerRuntime) Stats(_ context.Context, containerName string) (runtime.ContainerStats, error) {
+	return runtime.ContainerStats{}, nil
+}
+
 // Verify mockContainerRuntime implements runtime.ContainerRuntime
 var _ runtime.ContainerRuntime = (*mockContainerRuntime)(nil)
 

@@ -176,3 +176,20 @@ func TestMemoryRuntime_Concurrency(t *testing.T) {
 	wg.Wait()
 	// If we get here without deadlock or panic, concurrency is handled correctly
 }
+
+func TestMemoryRuntime_Stats(t *testing.T) {
+	mr := NewMemoryRuntime()
+	ctx := context.Background()
+
+	// Memory runtime should return zero stats
+	stats, err := mr.Stats(ctx, "any-container")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stats.CPUPercent != 0.0 {
+		t.Errorf("expected CPUPercent 0, got %v", stats.CPUPercent)
+	}
+	if stats.MemoryMB != 0.0 {
+		t.Errorf("expected MemoryMB 0, got %v", stats.MemoryMB)
+	}
+}

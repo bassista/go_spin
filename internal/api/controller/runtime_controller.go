@@ -375,3 +375,41 @@ func (rc *RuntimeController) ListContainers(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, names)
 }
+
+// ContainerStatsResponse represents the stats for a single container.
+type ContainerStatsResponse struct {
+	Name       string  `json:"name"`
+	CPUPercent float64 `json:"cpu_percent"`
+	MemoryMB   float64 `json:"memory_mb"`
+	Error      string  `json:"error,omitempty"`
+}
+
+// AllStats returns CPU and memory statistics for all containers defined in the store.
+func (rc *RuntimeController) AllStats(c *gin.Context) {
+	doc, err := rc.containerStore.Snapshot()
+	if err != nil {
+		logger.WithComponent("runtime_controller").Errorf("failed to read container list: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read container list"})
+		return
+	}
+
+	results := make([]ContainerStatsResponse, 0, len(doc.Containers))
+	for _, container := range doc.Containers {
+		stats, err := rc.runtime.Stats(c.Request.Context(), container.Name)
+		if err != nil {
+			logger.WithComponent("runtime_controller").Warnf("failed to get stats for container %s: %v", container.Name, err)
+			results = append(results, ContainerStatsResponse{
+				Name:  container.Name,
+				Error: err.Error(),
+			})
+			continue
+		}
+		results = append(results, ContainerStatsResponse{
+			Name:       container.Name,
+			CPUPercent: stats.CPUPercent,
+			MemoryMB:   stats.MemoryMB,
+		})
+	}
+
+	c.JSON(http.StatusOK, results)
+}

@@ -68,3 +68,16 @@ func (m *MemoryRuntime) ListContainers(_ context.Context) ([]string, error) {
 	logger.WithComponent("memory-runtime").Debugf("listing containers: %v", names)
 	return names, nil
 }
+
+// Stats returns simulated CPU and memory usage statistics for a container.
+// In the memory runtime, this returns zero values as no actual container exists.
+func (m *MemoryRuntime) Stats(_ context.Context, containerName string) (ContainerStats, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	logger.WithComponent("memory-runtime").Debugf("getting stats for container: %s", containerName)
+	// Memory runtime returns zero stats since there is no real container
+	return ContainerStats{
+		CPUPercent: 0.0,
+		MemoryMB:   0.0,
+	}, nil
+}

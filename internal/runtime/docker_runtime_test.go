@@ -1,8 +1,11 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/containerd/errdefs"
@@ -35,6 +38,11 @@ func (m *MockDockerClient) ContainerStop(ctx context.Context, containerID string
 func (m *MockDockerClient) ContainerList(ctx context.Context, options client.ContainerListOptions) (client.ContainerListResult, error) {
 	args := m.Called(ctx, options)
 	return args.Get(0).(client.ContainerListResult), args.Error(1)
+}
+
+func (m *MockDockerClient) ContainerStats(ctx context.Context, containerID string, options client.ContainerStatsOptions) (client.ContainerStatsResult, error) {
+	args := m.Called(ctx, containerID, options)
+	return args.Get(0).(client.ContainerStatsResult), args.Error(1)
 }
 
 func TestNewDockerRuntimeWithClient(t *testing.T) {
@@ -262,5 +270,85 @@ func TestDockerRuntime_ListContainers_Error(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, names)
 	assert.Contains(t, err.Error(), "error listing containers")
+	mockClient.AssertExpectations(t)
+}
+
+func TestDockerRuntime_Stats_Success(t *testing.T) {
+	mockClient := &MockDockerClient{}
+	dr := NewDockerRuntimeWithClient(mockClient)
+
+	ctx := context.Background()
+	containerName := "test-container"
+
+	// Create mock stats response JSON
+	statsResponse := container.StatsResponse{
+		CPUStats: container.CPUStats{
+			CPUUsage: container.CPUUsage{
+				TotalUsage: 1000000000, // 1 second in nanoseconds
+			},
+			SystemUsage: 10000000000, // 10 seconds
+			OnlineCPUs:  4,
+		},
+		PreCPUStats: container.CPUStats{
+			CPUUsage: container.CPUUsage{
+				TotalUsage: 500000000, // 0.5 seconds in nanoseconds
+			},
+			SystemUsage: 9000000000, // 9 seconds
+		},
+		MemoryStats: container.MemoryStats{
+			Usage: 104857600, // 100 MB in bytes
+		},
+	}
+
+	statsJSON, _ := json.Marshal(statsResponse)
+	mockBody := io.NopCloser(bytes.NewReader(statsJSON))
+
+	mockClient.On("ContainerStats", ctx, containerName, client.ContainerStatsOptions{
+		Stream:                false,
+		IncludePreviousSample: true,
+	}).Return(client.ContainerStatsResult{Body: mockBody}, nil)
+
+	stats, err := dr.Stats(ctx, containerName)
+	assert.NoError(t, err)
+	assert.InDelta(t, 100.0, stats.MemoryMB, 0.01)
+	assert.Greater(t, stats.CPUPercent, 0.0)
+	mockClient.AssertExpectations(t)
+}
+
+func TestDockerRuntime_Stats_NotFound(t *testing.T) {
+	mockClient := &MockDockerClient{}
+	dr := NewDockerRuntimeWithClient(mockClient)
+
+	ctx := context.Background()
+	containerName := "nonexistent"
+
+	mockClient.On("ContainerStats", ctx, containerName, client.ContainerStatsOptions{
+		Stream:                false,
+		IncludePreviousSample: true,
+	}).Return(client.ContainerStatsResult{}, errdefs.ErrNotFound)
+
+	stats, err := dr.Stats(ctx, containerName)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+	assert.Equal(t, ContainerStats{}, stats)
+	mockClient.AssertExpectations(t)
+}
+
+func TestDockerRuntime_Stats_Error(t *testing.T) {
+	mockClient := &MockDockerClient{}
+	dr := NewDockerRuntimeWithClient(mockClient)
+
+	ctx := context.Background()
+	containerName := "test-container"
+
+	mockClient.On("ContainerStats", ctx, containerName, client.ContainerStatsOptions{
+		Stream:                false,
+		IncludePreviousSample: true,
+	}).Return(client.ContainerStatsResult{}, errors.New("stats failed"))
+
+	stats, err := dr.Stats(ctx, containerName)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "error getting stats")
+	assert.Equal(t, ContainerStats{}, stats)
 	mockClient.AssertExpectations(t)
 }

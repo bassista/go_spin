@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bassista/go_spin/internal/repository"
+	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,6 +23,8 @@ type mockContainerRuntime struct {
 	stopErr           error
 	isRunningErr      error
 	listErr           error
+	statsErr          error
+	statsMap          map[string]runtime.ContainerStats
 	startCh           chan string // usato per sincronizzazione nei test
 	stopCh            chan string // usato per sincronizzazione stop nei test
 }
@@ -29,6 +32,7 @@ type mockContainerRuntime struct {
 func newMockRuntime() *mockContainerRuntime {
 	return &mockContainerRuntime{
 		runningContainers: make(map[string]bool),
+		statsMap:          make(map[string]runtime.ContainerStats),
 		startCh:           make(chan string, 10),
 		stopCh:            make(chan string, 10),
 	}
@@ -82,6 +86,18 @@ func (m *mockContainerRuntime) ListContainers(ctx context.Context) ([]string, er
 		names = append(names, n)
 	}
 	return names, nil
+}
+
+func (m *mockContainerRuntime) Stats(ctx context.Context, containerName string) (runtime.ContainerStats, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.statsErr != nil {
+		return runtime.ContainerStats{}, m.statsErr
+	}
+	if stats, ok := m.statsMap[containerName]; ok {
+		return stats, nil
+	}
+	return runtime.ContainerStats{}, nil
 }
 
 // newMockStoreWithContainer creates a mock store with a container
@@ -955,5 +971,165 @@ func TestRuntimeController_ListContainers_Error(t *testing.T) {
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected status 500 on runtime error, got %d", w.Code)
+	}
+}
+
+func TestRuntimeController_AllStats_Success(t *testing.T) {
+	rt := newMockRuntime()
+	rt.statsMap["container1"] = runtime.ContainerStats{CPUPercent: 25.5, MemoryMB: 128.0}
+	rt.statsMap["container2"] = runtime.ContainerStats{CPUPercent: 50.0, MemoryMB: 256.0}
+
+	active := true
+	store := &mockContainerStore{
+		doc: repository.DataDocument{
+			Containers: []repository.Container{
+				{Name: "container1", Active: &active},
+				{Name: "container2", Active: &active},
+			},
+		},
+	}
+
+	rc := NewRuntimeController(context.Background(), rt, store)
+
+	r := gin.New()
+	r.GET("/runtime/stats", rc.AllStats)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime/stats", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	var resp []ContainerStatsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if len(resp) != 2 {
+		t.Fatalf("expected 2 stats, got %d", len(resp))
+	}
+
+	// Find container1 stats
+	var c1Stats *ContainerStatsResponse
+	for i := range resp {
+		if resp[i].Name == "container1" {
+			c1Stats = &resp[i]
+			break
+		}
+	}
+
+	if c1Stats == nil {
+		t.Fatal("container1 not found in response")
+	}
+	if c1Stats.CPUPercent != 25.5 {
+		t.Errorf("expected CPUPercent 25.5, got %v", c1Stats.CPUPercent)
+	}
+	if c1Stats.MemoryMB != 128.0 {
+		t.Errorf("expected MemoryMB 128.0, got %v", c1Stats.MemoryMB)
+	}
+}
+
+func TestRuntimeController_AllStats_EmptyStore(t *testing.T) {
+	rt := newMockRuntime()
+	store := newMockStoreEmpty()
+	rc := NewRuntimeController(context.Background(), rt, store)
+
+	r := gin.New()
+	r.GET("/runtime/stats", rc.AllStats)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime/stats", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	var resp []ContainerStatsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if len(resp) != 0 {
+		t.Errorf("expected empty response, got %d items", len(resp))
+	}
+}
+
+func TestRuntimeController_AllStats_WithError(t *testing.T) {
+	rt := newMockRuntime()
+	rt.statsMap["container1"] = runtime.ContainerStats{CPUPercent: 10.0, MemoryMB: 64.0}
+	// container2 will return an error because statsErr is set and container2 is not in statsMap
+
+	active := true
+	store := &mockContainerStore{
+		doc: repository.DataDocument{
+			Containers: []repository.Container{
+				{Name: "container1", Active: &active},
+				{Name: "container2", Active: &active},
+			},
+		},
+	}
+
+	rc := NewRuntimeController(context.Background(), rt, store)
+
+	r := gin.New()
+	r.GET("/runtime/stats", rc.AllStats)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime/stats", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	var resp []ContainerStatsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	// Both containers should be in the response
+	if len(resp) != 2 {
+		t.Fatalf("expected 2 stats, got %d", len(resp))
+	}
+
+	// container1 should have valid stats
+	var c1Stats *ContainerStatsResponse
+	for i := range resp {
+		if resp[i].Name == "container1" {
+			c1Stats = &resp[i]
+			break
+		}
+	}
+	if c1Stats == nil {
+		t.Fatal("container1 not found in response")
+	}
+	if c1Stats.Error != "" {
+		t.Errorf("expected no error for container1, got %s", c1Stats.Error)
+	}
+}
+
+func TestRuntimeController_AllStats_StoreError(t *testing.T) {
+	rt := newMockRuntime()
+	store := &mockContainerStoreWithError{
+		snapshotErr: errors.New("store error"),
+	}
+	rc := NewRuntimeController(context.Background(), rt, store)
+
+	r := gin.New()
+	r.GET("/runtime/stats", rc.AllStats)
+
+	req := httptest.NewRequest(http.MethodGet, "/runtime/stats", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500 on store error, got %d", w.Code)
 	}
 }

@@ -20,5 +20,6 @@ func NewRuntimeRouter(baseCtx context.Context, timeout time.Duration, group *gin
 	group.POST("runtime/:name/start", rc.StartContainer)
 	group.POST("runtime/:name/stop", rc.StopContainer)
 	group.GET("runtime/containers", rc.ListContainers)
+	group.GET("runtime/stats", middleware.RequestTimeout(30*time.Second), rc.AllStats)
 	group.GET("start/:name", rc.WaitingPage)
 }

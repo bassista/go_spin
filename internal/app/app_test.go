@@ -8,6 +8,7 @@ import (
 
 	"github.com/bassista/go_spin/internal/config"
 	"github.com/bassista/go_spin/internal/repository"
+	"github.com/bassista/go_spin/internal/runtime"
 )
 
 // mockRepository implements repository.Repository for testing
@@ -137,6 +138,10 @@ func (m *mockRuntimeForApp) ListContainers(ctx context.Context) ([]string, error
 		names = append(names, n)
 	}
 	return names, nil
+}
+
+func (m *mockRuntimeForApp) Stats(ctx context.Context, containerName string) (runtime.ContainerStats, error) {
+	return runtime.ContainerStats{}, nil
 }
 
 func TestNew_Success(t *testing.T) {

@@ -9,9 +9,10 @@ import (
 
 // ConfigurationResponse represents the configuration response structure for the API.
 type ConfigurationResponse struct {
-	BaseUrl            string `json:"baseUrl"`
-	SpinUpUrl          string `json:"spinUpUrl"`
-	RefreshIntervalSec int    `json:"refreshIntervalSec"`
+	BaseUrl                 string `json:"baseUrl"`
+	SpinUpUrl               string `json:"spinUpUrl"`
+	RefreshIntervalSec      int    `json:"refreshIntervalSec"`
+	StatsRefreshIntervalSec int    `json:"statsRefreshIntervalSec"`
 }
 
 // ConfigurationController handles configuration-related API endpoints.
@@ -29,9 +30,10 @@ func NewConfigurationController(cfg *config.Config) *ConfigurationController {
 // GetConfiguration returns the application configuration for the frontend.
 func (cc *ConfigurationController) GetConfiguration(c *gin.Context) {
 	response := ConfigurationResponse{
-		BaseUrl:            cc.config.Data.BaseUrl,
-		SpinUpUrl:          cc.config.Data.SpinUpUrl,
-		RefreshIntervalSec: cc.config.Data.RefreshIntervalSecs,
+		BaseUrl:                 cc.config.Data.BaseUrl,
+		SpinUpUrl:               cc.config.Data.SpinUpUrl,
+		RefreshIntervalSec:      cc.config.Data.RefreshIntervalSecs,
+		StatsRefreshIntervalSec: cc.config.Data.StatsRefreshIntervalSecs,
 	}
 	c.JSON(http.StatusOK, response)
 }

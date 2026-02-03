@@ -4,6 +4,11 @@ function app() {
             // Auto-refresh interval (seconds)
             refreshInterval: 60, // default 60 seconds
             refreshTimer: null,
+            // Stats refresh interval (seconds)
+            statsRefreshInterval: 120, // default 120 seconds
+            statsRefreshTimer: null,
+            // Container stats map (name -> {cpu, mem})
+            containerStats: {},
         // State
         activeTab: 'containers',
         containers: [],
@@ -52,17 +57,23 @@ function app() {
         
         // API base URL (same origin)
         apiBase: '',
+            // Sorting and filtering for groups
+            groupSort: { key: 'name', asc: true },
+            groupFilter: { name: '' },
         
         // Server configuration
         configuration: {
             baseUrl: '',
-            spinUpUrl: ''
+            spinUpUrl: '',
+            statsRefreshIntervalSec: 120
         },
         
         // Initialize
         async init() {
             await this.loadAll();
+            await this.loadContainerStats();
             this.startAutoRefresh();
+            this.startStatsRefresh();
         },
         
         async loadAll() {
@@ -89,6 +100,54 @@ function app() {
             this.refreshInterval = seconds;
             this.startAutoRefresh();
         },
+
+        // Start stats refresh timer
+        startStatsRefresh() {
+            if (this.statsRefreshTimer) {
+                clearInterval(this.statsRefreshTimer);
+            }
+            this.statsRefreshTimer = setInterval(() => {
+                this.loadContainerStats();
+            }, this.statsRefreshInterval * 1000);
+        },
+
+        // Allow changing stats refresh interval at runtime
+        setStatsRefreshInterval(seconds) {
+            this.statsRefreshInterval = seconds;
+            this.startStatsRefresh();
+        },
+
+        // Load container stats from runtime/stats endpoint
+        async loadContainerStats() {
+            try {
+                const res = await fetch(`${this.apiBase}/runtime/stats`);
+                if (!res.ok) throw new Error(await res.text());
+                const stats = await res.json();
+                // Build a map by container name
+                const statsMap = {};
+                for (const s of stats) {
+                    if (s.error) {
+                        statsMap[s.name] = { cpu: 0, mem: 0 };
+                    } else {
+                        statsMap[s.name] = { cpu: s.cpu_percent, mem: s.memory_mb };
+                    }
+                }
+                this.containerStats = statsMap;
+            } catch (e) {
+                // On error, don't show error to user, just reset stats
+                this.containerStats = {};
+            }
+        },
+
+        // Get CPU stat for a container
+        getContainerCpu(name) {
+            return this.containerStats[name]?.cpu ?? 0;
+        },
+
+        // Get Memory stat for a container
+        getContainerMem(name) {
+            return this.containerStats[name]?.mem ?? 0;
+        },
         
         async loadConfiguration() {
             try {
@@ -99,8 +158,47 @@ function app() {
                 if (this.configuration.refreshIntervalSec && Number.isFinite(this.configuration.refreshIntervalSec)) {
                     this.setRefreshInterval(this.configuration.refreshIntervalSec);
                 }
+                // Se il server fornisce statsRefreshIntervalSec, aggiorna l'intervallo di refresh stats
+                if (this.configuration.statsRefreshIntervalSec && Number.isFinite(this.configuration.statsRefreshIntervalSec)) {
+                    this.setStatsRefreshInterval(this.configuration.statsRefreshIntervalSec);
+                }
             } catch (e) {
                 this.showError('Failed to load configuration: ' + e.message);
+            }
+        },
+        
+        // Computed: filtered and sorted groups
+        get filteredSortedGroups() {
+            let arr = [...this.groups];
+            // Filtering
+            if (this.groupFilter.name.trim() !== '') {
+                arr = arr.filter(g => g.name.toLowerCase().includes(this.groupFilter.name.trim().toLowerCase()));
+            }
+            // Sorting
+            const { key, asc } = this.groupSort;
+            arr.sort((a, b) => {
+                let va = a[key], vb = b[key];
+                if (key === 'active') {
+                    va = !!va ? 1 : 0;
+                    vb = !!vb ? 1 : 0;
+                } else {
+                    va = va ? va.toString().toLowerCase() : '';
+                    vb = vb ? vb.toString().toLowerCase() : '';
+                }
+                if (va < vb) return asc ? -1 : 1;
+                if (va > vb) return asc ? 1 : -1;
+                return 0;
+            });
+            return arr;
+        },
+        
+        // Change sorting for groups
+        sortGroupsBy(key) {
+            if (this.groupSort.key === key) {
+                this.groupSort.asc = !this.groupSort.asc;
+            } else {
+                this.groupSort.key = key;
+                this.groupSort.asc = true;
             }
         },
         
@@ -275,7 +373,7 @@ function app() {
                     const err = await res.json();
                     throw new Error(err.error || 'Start failed');
                 }
-                this.showSuccess(`Container "${name}" started`);
+                this.showSuccess(`Starting container "${name}" ....`);
                 await this.loadContainers();
             } catch (e) {
                 this.showError('Failed to start container: ' + e.message);
@@ -291,7 +389,7 @@ function app() {
                     const err = await res.json();
                     throw new Error(err.error || 'Stop failed');
                 }
-                this.showSuccess(`Container "${name}" stopped`);
+                this.showSuccess(`Stopping container "${name}" ....`);
                 await this.loadContainers();
             } catch (e) {
                 this.showError('Failed to stop container: ' + e.message);
@@ -409,7 +507,7 @@ function app() {
                 this.editingSchedule = false;
                 this.scheduleForm = {
                     id: this.generateId(),
-                    target: '',
+                    target: (this.containers && this.containers.length > 0) ? this.containers[0].name : '',
                     targetType: 'container',
                     timers: []
                 };

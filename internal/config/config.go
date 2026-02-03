@@ -34,13 +34,14 @@ type ServerConfig struct {
 }
 
 type DataConfig struct {
-	FilePath            string
-	PersistInterval     time.Duration
-	SchedulingEnabled   bool
-	SchedulingPoll      time.Duration
-	BaseUrl             string
-	SpinUpUrl           string
-	RefreshIntervalSecs int
+	FilePath                 string
+	PersistInterval          time.Duration
+	SchedulingEnabled        bool
+	SchedulingPoll           time.Duration
+	BaseUrl                  string
+	SpinUpUrl                string
+	RefreshIntervalSecs      int
+	StatsRefreshIntervalSecs int
 }
 
 type MiscConfig struct {
@@ -81,6 +82,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("data.base_url", "http://localhost/")
 	viper.SetDefault("data.spin_up_url", "http://localhost/")
 	viper.SetDefault("data.refresh_interval_secs", 60)
+	viper.SetDefault("data.stats_refresh_interval_secs", 120)
 	viper.SetDefault("misc.gin_mode", "release")
 	viper.SetDefault("misc.scheduling_timezone", "Local")
 	viper.SetDefault("misc.runtime_type", "docker")
@@ -126,13 +128,14 @@ func LoadConfig() (*Config, error) {
 			CORSAllowedOrigins: viper.GetString("server.cors_allowed_origins"),
 		},
 		Data: DataConfig{
-			FilePath:            viper.GetString("data.file_path"),
-			PersistInterval:     time.Duration(viper.GetInt("data.persist_interval_secs")) * time.Second,
-			SchedulingEnabled:   viper.GetBool("data.scheduling_enabled"),
-			SchedulingPoll:      time.Duration(viper.GetInt("data.scheduling_poll_interval_secs")) * time.Second,
-			BaseUrl:             viper.GetString("data.base_url"),
-			SpinUpUrl:           viper.GetString("data.spin_up_url"),
-			RefreshIntervalSecs: viper.GetInt("data.refresh_interval_secs"),
+			FilePath:                 viper.GetString("data.file_path"),
+			PersistInterval:          time.Duration(viper.GetInt("data.persist_interval_secs")) * time.Second,
+			SchedulingEnabled:        viper.GetBool("data.scheduling_enabled"),
+			SchedulingPoll:           time.Duration(viper.GetInt("data.scheduling_poll_interval_secs")) * time.Second,
+			BaseUrl:                  viper.GetString("data.base_url"),
+			SpinUpUrl:                viper.GetString("data.spin_up_url"),
+			RefreshIntervalSecs:      viper.GetInt("data.refresh_interval_secs"),
+			StatsRefreshIntervalSecs: viper.GetInt("data.stats_refresh_interval_secs"),
 		},
 		Misc: MiscConfig{
 			GinMode:      viper.GetString("misc.gin_mode"),
@@ -183,6 +186,9 @@ func dataFileExistenceCheck() error {
 func (c *Config) validate() error {
 	if c.Data.RefreshIntervalSecs <= 0 {
 		return fmt.Errorf("data.refresh_interval_secs must be positive")
+	}
+	if c.Data.StatsRefreshIntervalSecs <= 0 {
+		return fmt.Errorf("data.stats_refresh_interval_secs must be positive")
 	}
 	if c.Data.FilePath == "" {
 		return fmt.Errorf("data.file_path configuration is required")

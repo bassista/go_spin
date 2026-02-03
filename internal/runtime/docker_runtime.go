@@ -2,12 +2,14 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/bassista/go_spin/internal/logger"
 	"github.com/containerd/errdefs"
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 )
 
@@ -18,6 +20,7 @@ type DockerClient interface {
 	ContainerStart(ctx context.Context, containerID string, options client.ContainerStartOptions) (client.ContainerStartResult, error)
 	ContainerStop(ctx context.Context, containerID string, options client.ContainerStopOptions) (client.ContainerStopResult, error)
 	ContainerList(ctx context.Context, options client.ContainerListOptions) (client.ContainerListResult, error)
+	ContainerStats(ctx context.Context, containerID string, options client.ContainerStatsOptions) (client.ContainerStatsResult, error)
 }
 
 type DockerRuntime struct {
@@ -108,4 +111,49 @@ func (d *DockerRuntime) ListContainers(ctx context.Context) ([]string, error) {
 	})
 	logger.WithComponent("docker").Debugf("listed %d containers: %v", len(names), names)
 	return names, nil
+}
+
+// Stats returns CPU and memory usage statistics for a container.
+func (d *DockerRuntime) Stats(ctx context.Context, containerName string) (ContainerStats, error) {
+	logger.WithComponent("docker").Debugf("getting stats for container: %s", containerName)
+
+	result, err := d.cli.ContainerStats(ctx, containerName, client.ContainerStatsOptions{
+		Stream:                false,
+		IncludePreviousSample: true,
+	})
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			logger.WithComponent("docker").Debugf("container not found: %s", containerName)
+			return ContainerStats{}, fmt.Errorf("container %s not found", containerName)
+		}
+		logger.WithComponent("docker").Errorf("failed to get stats for container %s: %v", containerName, err)
+		return ContainerStats{}, fmt.Errorf("error getting stats for container %s: %w", containerName, err)
+	}
+	defer result.Body.Close()
+
+	var statsResponse container.StatsResponse
+	if err := json.NewDecoder(result.Body).Decode(&statsResponse); err != nil {
+		logger.WithComponent("docker").Errorf("failed to decode stats response for container %s: %v", containerName, err)
+		return ContainerStats{}, fmt.Errorf("error decoding stats for container %s: %w", containerName, err)
+	}
+
+	stats := ContainerStats{
+		CPUPercent: calculateCPUPercent(&statsResponse),
+		MemoryMB:   float64(statsResponse.MemoryStats.Usage) / (1024 * 1024),
+	}
+
+	logger.WithComponent("docker").Debugf("container %s stats: CPU=%.2f%%, Memory=%.2f MB", containerName, stats.CPUPercent, stats.MemoryMB)
+	return stats, nil
+}
+
+// calculateCPUPercent calculates the CPU usage percentage from Docker stats.
+func calculateCPUPercent(stats *container.StatsResponse) float64 {
+	cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(stats.CPUStats.SystemUsage - stats.PreCPUStats.SystemUsage)
+
+	if systemDelta > 0 && cpuDelta > 0 {
+		cpuPercent := (cpuDelta / systemDelta) * float64(stats.CPUStats.OnlineCPUs) * 100.0
+		return cpuPercent
+	}
+	return 0.0
 }
