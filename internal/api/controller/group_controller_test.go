@@ -278,3 +278,273 @@ func TestGroupController_DeleteGroup_MissingName(t *testing.T) {
 		t.Errorf("expected status 400, got %d", w.Code)
 	}
 }
+
+func TestGroupController_StartGroup_Success(t *testing.T) {
+	active := true
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{
+				{Name: "test-group", Container: []string{"c1", "c2"}, Active: &active},
+			},
+		},
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/start", gc.StartGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group/test-group/start", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGroupController_StartGroup_EmptyName(t *testing.T) {
+	active := true
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{
+				{Name: "", Container: []string{"c1"}, Active: &active},
+			},
+		},
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/start", gc.StartGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group//start", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	// Controller validates name param and returns 400 for empty string
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", w.Code)
+	}
+}
+
+func TestGroupController_StartGroup_NotFound(t *testing.T) {
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{},
+		},
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/start", gc.StartGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group/nonexistent/start", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestGroupController_StartGroup_InactiveGroup(t *testing.T) {
+	active := false
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{
+				{Name: "inactive-group", Container: []string{"c1"}, Active: &active},
+			},
+		},
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/start", gc.StartGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group/inactive-group/start", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected status 403, got %d", w.Code)
+	}
+}
+
+func TestGroupController_StartGroup_NilActiveGroup(t *testing.T) {
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{
+				{Name: "nil-active-group", Container: []string{"c1"}, Active: nil},
+			},
+		},
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/start", gc.StartGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group/nil-active-group/start", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected status 403, got %d", w.Code)
+	}
+}
+
+func TestGroupController_StopGroup_Success(t *testing.T) {
+	active := true
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{
+				{Name: "test-group", Container: []string{"c1", "c2"}, Active: &active},
+			},
+		},
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/stop", gc.StopGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group/test-group/stop", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGroupController_StopGroup_EmptyName(t *testing.T) {
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{
+				{Name: "", Container: []string{"c1"}},
+			},
+		},
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/stop", gc.StopGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group//stop", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	// Controller validates name param and returns 400 for empty string
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", w.Code)
+	}
+}
+
+func TestGroupController_StopGroup_NotFound(t *testing.T) {
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{},
+		},
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/stop", gc.StopGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group/nonexistent/stop", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestGroupController_DeleteGroup_StoreError(t *testing.T) {
+	store := &mockGroupStore{
+		doc: repository.DataDocument{
+			Groups: []repository.Group{},
+		},
+		removeErr: errors.New("store error"),
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.DELETE("/group/:name", gc.DeleteGroup)
+
+	req := httptest.NewRequest(http.MethodDelete, "/group/some-group", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", w.Code)
+	}
+}
+
+// mockGroupStoreWithSnapshotError implements cache.GroupStore for testing snapshot errors
+type mockGroupStoreWithSnapshotError struct {
+	mockGroupStore
+	snapshotErr error
+}
+
+func (m *mockGroupStoreWithSnapshotError) Snapshot() (repository.DataDocument, error) {
+	if m.snapshotErr != nil {
+		return repository.DataDocument{}, m.snapshotErr
+	}
+	return m.mockGroupStore.Snapshot()
+}
+
+func TestGroupController_StartGroup_SnapshotError(t *testing.T) {
+	store := &mockGroupStoreWithSnapshotError{
+		snapshotErr: errors.New("snapshot error"),
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/start", gc.StartGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group/test-group/start", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", w.Code)
+	}
+}
+
+func TestGroupController_StopGroup_SnapshotError(t *testing.T) {
+	store := &mockGroupStoreWithSnapshotError{
+		snapshotErr: errors.New("snapshot error"),
+	}
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
+
+	r := gin.New()
+	r.POST("/group/:name/stop", gc.StopGroup)
+
+	req := httptest.NewRequest(http.MethodPost, "/group/test-group/stop", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", w.Code)
+	}
+}

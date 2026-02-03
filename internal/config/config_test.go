@@ -307,3 +307,311 @@ func TestGetEnvOrViperPort_InvalidEnv(t *testing.T) {
 		t.Error("expected error for invalid port")
 	}
 }
+
+func TestConfig_Validate_ZeroRefreshInterval(t *testing.T) {
+	cfg := &Config{
+		Server: ServerConfig{
+			Port:            8080,
+			ReadTimeout:     10 * time.Second,
+			WriteTimeout:    10 * time.Second,
+			IdleTimeout:     120 * time.Second,
+			ShutDownTimeout: 5 * time.Second,
+			RequestTimeout:  1000 * time.Millisecond,
+		},
+		Data: DataConfig{
+			FilePath:                 "/tmp/config.json",
+			PersistInterval:          5 * time.Second,
+			SchedulingPoll:           30 * time.Second,
+			RefreshIntervalSecs:      0,
+			StatsRefreshIntervalSecs: 120,
+		},
+		Misc: MiscConfig{
+			SchedulingTZ: "Local",
+		},
+	}
+
+	err := cfg.validate()
+	if err == nil {
+		t.Error("expected error for zero refresh interval")
+	}
+}
+
+func TestConfig_Validate_ZeroStatsRefreshInterval(t *testing.T) {
+	cfg := &Config{
+		Server: ServerConfig{
+			Port:            8080,
+			ReadTimeout:     10 * time.Second,
+			WriteTimeout:    10 * time.Second,
+			IdleTimeout:     120 * time.Second,
+			ShutDownTimeout: 5 * time.Second,
+			RequestTimeout:  1000 * time.Millisecond,
+		},
+		Data: DataConfig{
+			FilePath:                 "/tmp/config.json",
+			PersistInterval:          5 * time.Second,
+			SchedulingPoll:           30 * time.Second,
+			RefreshIntervalSecs:      60,
+			StatsRefreshIntervalSecs: 0,
+		},
+		Misc: MiscConfig{
+			SchedulingTZ: "Local",
+		},
+	}
+
+	err := cfg.validate()
+	if err == nil {
+		t.Error("expected error for zero stats refresh interval")
+	}
+}
+
+func TestConfig_Validate_ZeroRequestTimeout(t *testing.T) {
+	cfg := &Config{
+		Server: ServerConfig{
+			Port:            8080,
+			ReadTimeout:     10 * time.Second,
+			WriteTimeout:    10 * time.Second,
+			IdleTimeout:     120 * time.Second,
+			ShutDownTimeout: 5 * time.Second,
+			RequestTimeout:  0,
+		},
+		Data: DataConfig{
+			FilePath:                 "/tmp/config.json",
+			PersistInterval:          5 * time.Second,
+			SchedulingPoll:           30 * time.Second,
+			RefreshIntervalSecs:      60,
+			StatsRefreshIntervalSecs: 120,
+		},
+		Misc: MiscConfig{
+			SchedulingTZ: "Local",
+		},
+	}
+
+	err := cfg.validate()
+	if err == nil {
+		t.Error("expected error for zero request timeout")
+	}
+}
+
+func TestConfig_Validate_EmptyTimezone(t *testing.T) {
+	cfg := &Config{
+		Server: ServerConfig{
+			Port:            8080,
+			ReadTimeout:     10 * time.Second,
+			WriteTimeout:    10 * time.Second,
+			IdleTimeout:     120 * time.Second,
+			ShutDownTimeout: 5 * time.Second,
+			RequestTimeout:  1000 * time.Millisecond,
+		},
+		Data: DataConfig{
+			FilePath:                 "/tmp/config.json",
+			PersistInterval:          5 * time.Second,
+			SchedulingPoll:           30 * time.Second,
+			RefreshIntervalSecs:      60,
+			StatsRefreshIntervalSecs: 120,
+		},
+		Misc: MiscConfig{
+			SchedulingTZ: "",
+		},
+	}
+
+	// Empty timezone should be valid (defaults to Local)
+	err := cfg.validate()
+	if err != nil {
+		t.Errorf("expected no error for empty timezone, got: %v", err)
+	}
+}
+
+func TestGetEnvOrViperPort_FromViper(t *testing.T) {
+	// Test with no env var set - should use viper value (which may be 0 if not configured)
+	port, err := getEnvOrViperPort("NONEXISTENT_PORT_VAR_12345", "server.port")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	// When env var is not set, getEnvOrViperPort returns viper value
+	// In test context, viper may not be configured, so port can be 0 or the default
+	// We just verify no error was returned - the value depends on viper state
+	_ = port
+}
+
+func TestGetEnvOrDefault_EmptyValue(t *testing.T) {
+	// Test with env var set to empty
+	_ = os.Setenv("TEST_EMPTY_VAR", "")
+	defer func() { _ = os.Unsetenv("TEST_EMPTY_VAR") }()
+
+	result := getEnvOrDefault("TEST_EMPTY_VAR", "default_value")
+	// Empty string should return default
+	if result != "default_value" {
+		t.Errorf("expected 'default_value' for empty env, got '%s'", result)
+	}
+}
+
+func TestLoadConfig_WithValidDefaults(t *testing.T) {
+	// Create a temp dir for config
+	tempDir := t.TempDir()
+	dataDir := tempDir + "/data"
+
+	// Set environment variables to use temp directory
+	_ = os.Setenv("GO_SPIN_CONFIG_PATH", tempDir)
+	_ = os.Setenv("GO_SPIN_DATA_FILE_PATH", dataDir+"/config.json")
+	defer func() {
+		_ = os.Unsetenv("GO_SPIN_CONFIG_PATH")
+		_ = os.Unsetenv("GO_SPIN_DATA_FILE_PATH")
+	}()
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("expected no error loading config, got: %v", err)
+	}
+
+	if cfg == nil {
+		t.Fatal("expected non-nil config")
+	}
+
+	// Verify default values
+	if cfg.Server.Port <= 0 {
+		t.Errorf("expected positive port, got %d", cfg.Server.Port)
+	}
+	if cfg.Server.ReadTimeout <= 0 {
+		t.Error("expected positive read timeout")
+	}
+	if cfg.Server.WriteTimeout <= 0 {
+		t.Error("expected positive write timeout")
+	}
+	if cfg.Server.IdleTimeout <= 0 {
+		t.Error("expected positive idle timeout")
+	}
+	if cfg.Data.PersistInterval <= 0 {
+		t.Error("expected positive persist interval")
+	}
+	if cfg.Data.SchedulingPoll <= 0 {
+		t.Error("expected positive scheduling poll interval")
+	}
+}
+
+func TestLoadConfig_WithCustomPort(t *testing.T) {
+	tempDir := t.TempDir()
+	dataDir := tempDir + "/data"
+
+	// Set custom port via env var
+	_ = os.Setenv("GO_SPIN_CONFIG_PATH", tempDir)
+	_ = os.Setenv("GO_SPIN_DATA_FILE_PATH", dataDir+"/config.json")
+	_ = os.Setenv("PORT", "9999")
+	defer func() {
+		_ = os.Unsetenv("GO_SPIN_CONFIG_PATH")
+		_ = os.Unsetenv("GO_SPIN_DATA_FILE_PATH")
+		_ = os.Unsetenv("PORT")
+	}()
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("expected no error loading config, got: %v", err)
+	}
+
+	if cfg.Server.Port != 9999 {
+		t.Errorf("expected port 9999, got %d", cfg.Server.Port)
+	}
+}
+
+func TestLoadConfig_WithInvalidPort(t *testing.T) {
+	tempDir := t.TempDir()
+
+	_ = os.Setenv("GO_SPIN_CONFIG_PATH", tempDir)
+	_ = os.Setenv("PORT", "not_a_port")
+	defer func() {
+		_ = os.Unsetenv("GO_SPIN_CONFIG_PATH")
+		_ = os.Unsetenv("PORT")
+	}()
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Error("expected error for invalid port, got nil")
+	}
+}
+
+func TestLoadConfig_WithInvalidWaitingServerPort(t *testing.T) {
+	tempDir := t.TempDir()
+
+	_ = os.Setenv("GO_SPIN_CONFIG_PATH", tempDir)
+	_ = os.Setenv("WAITING_SERVER_PORT", "invalid")
+	defer func() {
+		_ = os.Unsetenv("GO_SPIN_CONFIG_PATH")
+		_ = os.Unsetenv("WAITING_SERVER_PORT")
+	}()
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Error("expected error for invalid waiting server port, got nil")
+	}
+}
+
+func TestLoadConfig_CreatesDataFile(t *testing.T) {
+	tempDir := t.TempDir()
+	dataFilePath := tempDir + "/data/test_config.json"
+
+	_ = os.Setenv("GO_SPIN_CONFIG_PATH", tempDir)
+	_ = os.Setenv("GO_SPIN_DATA_FILE_PATH", dataFilePath)
+	defer func() {
+		_ = os.Unsetenv("GO_SPIN_CONFIG_PATH")
+		_ = os.Unsetenv("GO_SPIN_DATA_FILE_PATH")
+	}()
+
+	// Verify file doesn't exist
+	if _, err := os.Stat(dataFilePath); !os.IsNotExist(err) {
+		t.Fatal("expected data file to not exist initially")
+	}
+
+	_, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Verify file was created
+	if _, err := os.Stat(dataFilePath); os.IsNotExist(err) {
+		t.Error("expected data file to be created")
+	}
+
+	// Verify file has empty JSON object
+	content, err := os.ReadFile(dataFilePath)
+	if err != nil {
+		t.Fatalf("failed to read data file: %v", err)
+	}
+	if string(content) != "{}" {
+		t.Errorf("expected '{}', got '%s'", string(content))
+	}
+}
+
+func TestLoadConfig_UsesExistingDataFile(t *testing.T) {
+	tempDir := t.TempDir()
+	dataDir := tempDir + "/data"
+	dataFilePath := dataDir + "/config.json"
+
+	// Create the data directory and file before LoadConfig
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatalf("failed to create data dir: %v", err)
+	}
+	existingContent := `{"containers":[]}`
+	if err := os.WriteFile(dataFilePath, []byte(existingContent), 0644); err != nil {
+		t.Fatalf("failed to write data file: %v", err)
+	}
+
+	_ = os.Setenv("GO_SPIN_CONFIG_PATH", tempDir)
+	_ = os.Setenv("GO_SPIN_DATA_FILE_PATH", dataFilePath)
+	defer func() {
+		_ = os.Unsetenv("GO_SPIN_CONFIG_PATH")
+		_ = os.Unsetenv("GO_SPIN_DATA_FILE_PATH")
+	}()
+
+	_, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Verify file content wasn't overwritten
+	content, err := os.ReadFile(dataFilePath)
+	if err != nil {
+		t.Fatalf("failed to read data file: %v", err)
+	}
+	if string(content) != existingContent {
+		t.Errorf("expected '%s', got '%s'", existingContent, string(content))
+	}
+}

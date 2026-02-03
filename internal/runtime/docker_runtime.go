@@ -98,10 +98,7 @@ func (d *DockerRuntime) ListContainers(ctx context.Context) ([]string, error) {
 	for _, c := range result.Items {
 		if len(c.Names) > 0 {
 			// Container names are prefixed with '/', strip it
-			name := c.Names[0]
-			if strings.HasPrefix(name, "/") {
-				name = name[1:]
-			}
+			name := strings.TrimPrefix(c.Names[0], "/")
 			names = append(names, name)
 		}
 	}
@@ -129,7 +126,11 @@ func (d *DockerRuntime) Stats(ctx context.Context, containerName string) (Contai
 		logger.WithComponent("docker").Errorf("failed to get stats for container %s: %v", containerName, err)
 		return ContainerStats{}, fmt.Errorf("error getting stats for container %s: %w", containerName, err)
 	}
-	defer result.Body.Close()
+	defer func() {
+		if cerr := result.Body.Close(); cerr != nil {
+			logger.WithComponent("docker").Errorf("failed to close stats response body for container %s: %v", containerName, cerr)
+		}
+	}()
 
 	var statsResponse container.StatsResponse
 	if err := json.NewDecoder(result.Body).Decode(&statsResponse); err != nil {

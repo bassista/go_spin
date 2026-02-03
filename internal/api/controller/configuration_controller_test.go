@@ -118,7 +118,7 @@ func TestNewConfigurationController(t *testing.T) {
 	controller := NewConfigurationController(cfg)
 
 	if controller == nil {
-		t.Error("expected controller to be created, got nil")
+		t.Fatal("expected controller to be created, got nil")
 	}
 
 	if controller.config != cfg {

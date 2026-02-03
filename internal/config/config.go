@@ -173,7 +173,11 @@ func dataFileExistenceCheck() error {
 		if err != nil {
 			return fmt.Errorf("failed to create data file %s: %w", fileStorePath, err)
 		}
-		defer emptyFile.Close()
+		defer func() {
+			if cerr := emptyFile.Close(); cerr != nil {
+				logger.WithComponent("config").Errorf("failed to close data file %s: %v", fileStorePath, cerr)
+			}
+		}()
 		if _, err := emptyFile.WriteString("{}"); err != nil {
 			return fmt.Errorf("failed to write to data file %s: %w", fileStorePath, err)
 		}
