@@ -12,8 +12,16 @@
       "activatedAt": null
     },
     {
-      "name": "plex",
-      "friendly_name": "Plex",
+      "name": "airsonic-advanced",
+      "friendly_name": "airsonic",
+      "url": "https://plex:12301",
+      "running": true,
+      "active": true,
+      "activatedAt": null
+    },
+    {
+      "name": "gospin_dev",
+      "friendly_name": "gospin_dev",
       "url": "https://plex:12301",
       "running": true,
       "active": true,
