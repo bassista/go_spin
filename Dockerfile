@@ -34,8 +34,8 @@ ENV PORT=${PORT}
 ARG WAITING_SERVER_PORT=8085
 ENV WAITING_SERVER_PORT=${WAITING_SERVER_PORT}
 
-ENV GO_SPIN_DATA_BASE_URL="https://$1.mydomain.com"
-ENV GO_SPIN_DATA_SPIN_UP_URL="https://up.mydomain.com/$1"
+ENV GO_SPIN_DATA_BASE_URL="https://container.mydomain.com"
+ENV GO_SPIN_DATA_SPIN_UP_URL="https://up.mydomain.com/container"
 
 EXPOSE ${PORT}
 EXPOSE ${WAITING_SERVER_PORT}
