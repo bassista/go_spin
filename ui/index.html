@@ -58,7 +58,7 @@
         <div x-show="activeTab === 'containers'" x-transition>
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-semibold">Containers</h2>
-                <div class="space-x-2">
+                <div :class="showStackButtons ? 'flex flex-col items-end space-y-2' : 'space-x-2'">
                     <button @click="refreshContainersWithStats()" :disabled="isContainerRefreshing" :class="isContainerRefreshing ? 'bg-gray-400 cursor-not-allowed' : 'bg-gray-500 hover:bg-gray-600'" class="text-white px-3 py-1 rounded inline-flex items-center">
                         <span :class="isContainerRefreshing ? 'animate-spin' : ''" class="mr-1">🔄</span> Refresh
                     </button>
@@ -106,7 +106,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         <template x-for="container in filteredSortedContainers" :key="container.name">
-                            <tr>
+                            <tr @click="openContainerDetails(container)" class="hover:bg-gray-50 cursor-pointer">
                                 <td class="px-4 py-3 font-medium" x-text="container.name"></td>
                                 <td :class="{ 'hidden': !showMetaColumns }" class="px-4 py-3" x-text="container.friendly_name"></td>
                                 <td class="px-4 py-3 hidden lg:table-cell">
@@ -131,10 +131,10 @@
                                     <span class="text-xs" x-text="getContainerMem(container.name).toFixed(1)"></span>
                                 </td>
                                 <td class="px-4 py-3 space-x-1">
-                                    <button @click="openContainerModal(container)" class="text-blue-500 hover:text-blue-700">✏️</button>
-                                    <button @click="deleteContainer(container.name)" class="text-red-500 hover:text-red-700">🗑️</button>
-                                    <button x-show="!container.running" @click="startContainer(container.name)" class="text-green-500 hover:text-green-700">▶️</button>
-                                    <button x-show="container.running" @click="stopContainer(container.name)" class="text-orange-500 hover:text-orange-700">⏹️</button>
+                                    <button @click.stop="openContainerModal(container)" class="text-blue-500 hover:text-blue-700">✏️</button>
+                                    <button @click.stop="deleteContainer(container.name)" class="text-red-500 hover:text-red-700">🗑️</button>
+                                    <button x-show="!container.running" @click.stop="startContainer(container.name)" class="text-green-500 hover:text-green-700">▶️</button>
+                                    <button x-show="container.running" @click.stop="stopContainer(container.name)" class="text-orange-500 hover:text-orange-700">⏹️</button>
                                 </td>
                             </tr>
                         </template>
@@ -143,6 +143,58 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- Container Details Modal (read-only) -->
+        <div x-show="showContainerDetailsModal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" x-transition>
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4" @click.away="showContainerDetailsModal = false">
+                <div class="px-6 py-4 border-b flex justify-between items-center">
+                    <h3 class="text-lg font-semibold">Container Details</h3>
+                    <button @click="showContainerDetailsModal = false" class="text-gray-600">&times;</button>
+                </div>
+                <div class="p-6 space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="font-medium">Name</span>
+                        <span x-text="detailsContainer.name"></span>
+                    </div>
+                    <div class="flex justify-between" :class="{ 'hidden': !showMetaColumns }">
+                        <span class="font-medium">Friendly Name</span>
+                        <span x-text="detailsContainer.friendly_name"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">URL</span>
+                        <a :href="detailsContainer.url" target="_blank" class="text-blue-500 hover:underline" x-text="detailsContainer.url"></a>
+                    </div>
+                    <div class="flex justify-between hidden lg:flex">
+                        <span class="font-medium">SpinUp</span>
+                        <template x-if="generateSpinUpUrl(detailsContainer.friendly_name)">
+                            <a :href="generateSpinUpUrl(detailsContainer.friendly_name)" target="_blank" class="text-blue-500 hover:underline" x-text="generateSpinUpUrl(detailsContainer.friendly_name)"></a>
+                        </template>
+                        <template x-if="!generateSpinUpUrl(detailsContainer.friendly_name)">
+                            <span class="text-gray-400">-</span>
+                        </template>
+                    </div>
+                    <div class="flex justify-between" :class="{ 'hidden': !showMetaColumns }">
+                        <span class="font-medium">Active</span>
+                        <span x-text="detailsContainer.active ? 'Yes' : 'No'"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Running</span>
+                        <span x-text="detailsContainer.running ? 'Running' : 'Stopped'"></span>
+                    </div>
+                    <div class="flex justify-between" :class="{ 'hidden': !showStatsColumns }">
+                        <span class="font-medium">CPU %</span>
+                        <span x-text="getContainerCpu(detailsContainer.name).toFixed(1)"></span>
+                    </div>
+                    <div class="flex justify-between" :class="{ 'hidden': !showStatsColumns }">
+                        <span class="font-medium">MEM (MB)</span>
+                        <span x-text="getContainerMem(detailsContainer.name).toFixed(1)"></span>
+                    </div>
+                    <div class="flex justify-end pt-4">
+                        <button @click="showContainerDetailsModal = false" class="px-4 py-2 border rounded hover:bg-gray-50">Close</button>
+                    </div>
+                </div>
             </div>
         </div>
 

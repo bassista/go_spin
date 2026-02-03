@@ -13,6 +13,8 @@ function app() {
             showStatsColumns: true,
             // Show Friendly Name and Active columns (responsive for very small screens)
             showMetaColumns: true,
+            // Stack action buttons under small screens (<400px)
+            showStackButtons: false,
             // Container refresh loading state
             isContainerRefreshing: false,
         // State
@@ -27,6 +29,15 @@ function app() {
         showContainerModal: false,
         showGroupModal: false,
         showScheduleModal: false,
+        // Details modal for a container (read-only)
+        showContainerDetailsModal: false,
+        detailsContainer: {
+            name: '',
+            friendly_name: '',
+            url: '',
+            running: false,
+            active: false
+        },
         
         // Runtime containers for autocomplete
         runtimeContainers: [],
@@ -85,7 +96,8 @@ function app() {
             const updateResponsive = () => {
                 const w = window.innerWidth;
                 this.showStatsColumns = w >= 800;
-                this.showMetaColumns = w >= 420;
+                this.showMetaColumns = w >= 600;
+                this.showStackButtons = w < 400;
             };
             updateResponsive();
             window.addEventListener('resize', updateResponsive);
@@ -435,6 +447,17 @@ function app() {
             } catch (e) {
                 this.showError('Failed to save container: ' + e.message);
             }
+        },
+
+        openContainerDetails(container) {
+            this.detailsContainer = {
+                name: container.name,
+                friendly_name: container.friendly_name,
+                url: container.url,
+                running: container.running || false,
+                active: container.active || false
+            };
+            this.showContainerDetailsModal = true;
         },
         
         async deleteContainer(name) {
