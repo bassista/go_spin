@@ -12,12 +12,12 @@ import (
 )
 
 func NewGroupRouter(baseCtx context.Context, timeout time.Duration, group *gin.RouterGroup, store cache.GroupStore, rt runtime.ContainerRuntime) {
-	group.Use(middleware.RequestTimeout(timeout))
-
 	gc := controller.NewGroupController(baseCtx, store, rt)
-	group.GET("groups", gc.AllGroups)
-	group.POST("group", gc.CreateOrUpdateGroup)
-	group.DELETE("group/:name", gc.DeleteGroup)
-	group.POST("group/:name/start", gc.StartGroup)
-	group.POST("group/:name/stop", gc.StopGroup)
+	timeoutMiddleware := middleware.RequestTimeout(timeout)
+
+	group.GET("groups", timeoutMiddleware, gc.AllGroups)
+	group.POST("group", timeoutMiddleware, gc.CreateOrUpdateGroup)
+	group.DELETE("group/:name", timeoutMiddleware, gc.DeleteGroup)
+	group.POST("group/:name/start", timeoutMiddleware, gc.StartGroup)
+	group.POST("group/:name/stop", timeoutMiddleware, gc.StopGroup)
 }

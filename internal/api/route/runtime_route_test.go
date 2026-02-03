@@ -84,7 +84,7 @@ func TestRuntimeRoute_StatsEndpointHasLongerTimeout(t *testing.T) {
 	group := r.Group("/api")
 
 	// Default timeout is very short (100ms), but stats should have 30s
-	NewRuntimeRouter(context.Background(), 100*time.Millisecond, group, mockRT, mockStore)
+	NewRuntimeRouter(context.Background(), 100*time.Millisecond, 30*time.Second, group, mockRT, mockStore)
 
 	// Test that stats endpoint succeeds even though it takes longer than default timeout
 	req, _ := http.NewRequest(http.MethodGet, "/api/runtime/stats", nil)
@@ -107,7 +107,7 @@ func TestRuntimeRoute_DefaultTimeoutAppliedToOtherRoutes(t *testing.T) {
 	group := r.Group("/api")
 
 	// Use a short timeout
-	NewRuntimeRouter(context.Background(), 50*time.Millisecond, group, mockRT, mockStore)
+	NewRuntimeRouter(context.Background(), 50*time.Millisecond, 30*time.Second, group, mockRT, mockStore)
 
 	// Test that containers endpoint gets the default timeout context
 	req, _ := http.NewRequest(http.MethodGet, "/api/runtime/containers", nil)
@@ -138,7 +138,7 @@ func TestRuntimeRoute_StatsTimeoutIsIndependentFromDefaultTimeout(t *testing.T) 
 
 	// Default timeout is 50ms, much shorter than stats delay
 	// If stats used the default timeout, it would fail
-	NewRuntimeRouter(context.Background(), 50*time.Millisecond, group, mockRT, mockStore)
+	NewRuntimeRouter(context.Background(), 50*time.Millisecond, 30*time.Second, group, mockRT, mockStore)
 
 	req, _ := http.NewRequest(http.MethodGet, "/api/runtime/stats", nil)
 	w := httptest.NewRecorder()
@@ -164,7 +164,7 @@ func TestRuntimeRoute_StatsContextDeadlineIsApproximately30Seconds(t *testing.T)
 	r := gin.New()
 	group := r.Group("/api")
 
-	NewRuntimeRouter(context.Background(), 100*time.Millisecond, group, mockRT, mockStore)
+	NewRuntimeRouter(context.Background(), 100*time.Millisecond, 30*time.Second, group, mockRT, mockStore)
 
 	// We need to intercept the context. Let's modify our approach:
 	// Instead, we verify the behavior by checking that a 200ms operation succeeds
@@ -185,7 +185,7 @@ func TestRuntimeRoute_StatsContextDeadlineIsApproximately30Seconds(t *testing.T)
 	// Apply our middleware directly
 	r3 := gin.New()
 	group3 := r3.Group("/api")
-	NewRuntimeRouter(context.Background(), 100*time.Millisecond, group3, mockRT2, mockStore)
+	NewRuntimeRouter(context.Background(), 100*time.Millisecond, 30*time.Second, group3, mockRT2, mockStore)
 
 	req, _ := http.NewRequest(http.MethodGet, "/api/runtime/stats", nil)
 	w := httptest.NewRecorder()

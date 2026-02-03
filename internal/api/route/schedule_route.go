@@ -10,10 +10,10 @@ import (
 )
 
 func NewScheduleRouter(timeout time.Duration, group *gin.RouterGroup, store cache.ScheduleStore) {
-	group.Use(middleware.RequestTimeout(timeout))
-
 	sc := controller.NewScheduleController(store)
-	group.GET("schedules", sc.AllSchedules)
-	group.POST("schedule", sc.CreateOrUpdateSchedule)
-	group.DELETE("schedule/:id", sc.DeleteSchedule)
+	timeoutMiddleware := middleware.RequestTimeout(timeout)
+
+	group.GET("schedules", timeoutMiddleware, sc.AllSchedules)
+	group.POST("schedule", timeoutMiddleware, sc.CreateOrUpdateSchedule)
+	group.DELETE("schedule/:id", timeoutMiddleware, sc.DeleteSchedule)
 }

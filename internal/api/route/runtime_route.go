@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func NewRuntimeRouter(baseCtx context.Context, timeout time.Duration, group *gin.RouterGroup, rt runtime.ContainerRuntime, store cache.ContainerStore) {
+func NewRuntimeRouter(baseCtx context.Context, timeout time.Duration, serverTimeout time.Duration, group *gin.RouterGroup, rt runtime.ContainerRuntime, store cache.ContainerStore) {
 	rc := controller.NewRuntimeController(baseCtx, rt, store)
 
 	// Apply default timeout middleware to most routes
@@ -23,6 +23,6 @@ func NewRuntimeRouter(baseCtx context.Context, timeout time.Duration, group *gin
 	group.GET("runtime/containers", defaultTimeout, rc.ListContainers)
 	group.GET("start/:name", defaultTimeout, rc.WaitingPage)
 
-	// Stats endpoint needs a longer timeout (30s) since it queries all containers
-	group.GET("runtime/stats", middleware.RequestTimeout(30*time.Second), rc.AllStats)
+	// Stats endpoint needs a longer timeout since it queries all containers
+	group.GET("runtime/stats", middleware.RequestTimeout(serverTimeout), rc.AllStats)
 }

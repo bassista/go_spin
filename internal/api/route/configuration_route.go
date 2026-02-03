@@ -11,9 +11,8 @@ import (
 
 // NewConfigurationRouter sets up configuration-related routes.
 func NewConfigurationRouter(timeout time.Duration, group *gin.RouterGroup, cfg *config.Config) {
-	group.Use(middleware.RequestTimeout(timeout))
-
 	cc := controller.NewConfigurationController(cfg)
+	timeoutMiddleware := middleware.RequestTimeout(timeout)
 
-	group.GET("configuration", cc.GetConfiguration)
+	group.GET("configuration", timeoutMiddleware, cc.GetConfiguration)
 }
