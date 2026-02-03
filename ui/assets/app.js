@@ -9,6 +9,8 @@ function app() {
             statsRefreshTimer: null,
             // Container stats map (name -> {cpu, mem})
             containerStats: {},
+            // Show CPU/MEM columns (responsive)
+            showStatsColumns: true,
             // Container refresh loading state
             isContainerRefreshing: false,
         // State
@@ -77,6 +79,12 @@ function app() {
         
         // Initialize
         async init() {
+            // initialize responsive state and listen to resize
+            this.showStatsColumns = window.innerWidth >= 800;
+            window.addEventListener('resize', () => {
+                this.showStatsColumns = window.innerWidth >= 800;
+            });
+
             await this.loadAll();
             await this.loadContainerStats();
             this.startAutoRefresh();
