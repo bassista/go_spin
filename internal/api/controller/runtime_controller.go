@@ -76,7 +76,8 @@ func (rc *RuntimeController) IsRunning(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		logger.WithComponent("runtime_controller").Errorf("failed to check if container %s is running: %v", name, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to determine container running state"})
 		return
 	}
 
@@ -113,14 +114,22 @@ func (rc *RuntimeController) StartContainer(c *gin.Context) {
 		return
 	}
 
-	if err := rc.runtime.Start(c.Request.Context(), name); err != nil {
-		// Check if error is "container not found"
+	// Check if container is running, if not start it in background
+	running, err := rc.runtime.IsRunning(c.Request.Context(), name)
+	if err != nil {
+		logger.WithComponent("runtime_controller").Warnf("failed to check if container %s is running: %v", name, err)
+
 		if strings.Contains(err.Error(), "not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Container not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+
+		// Assume not running and try to start
+		running = false
+	}
+
+	if !running {
+		rc.startContainerInBackground(name)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -156,20 +165,40 @@ func (rc *RuntimeController) StopContainer(c *gin.Context) {
 		return
 	}
 
-	if err := rc.runtime.Stop(c.Request.Context(), name); err != nil {
-		// Check if error is "container not found"
+	// Check if container is running, if it is then stop it in background
+	running, err := rc.runtime.IsRunning(c.Request.Context(), name)
+	if err != nil {
+		logger.WithComponent("runtime_controller").Warnf("failed to check if container %s is running: %v", name, err)
+
 		if strings.Contains(err.Error(), "not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Container not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+
+		// Assume running and try to stop
+		running = true
+	}
+
+	if running {
+		rc.stopContainerInBackground(name)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"name":    name,
 		"message": "container stopped",
 	})
+}
+
+// stopContainerInBackground stops a container in a dedicated goroutine.
+func (rc *RuntimeController) stopContainerInBackground(containerName string) {
+	go func(name string) {
+		logger.WithComponent("runtime_controller").Infof("stopping container %s in background", name)
+		if err := rc.runtime.Stop(rc.baseCtx, name); err != nil {
+			logger.WithComponent("runtime_controller").Errorf("failed to stop container %s in background: %v", name, err)
+		} else {
+			logger.WithComponent("runtime_controller").Infof("container %s stopped successfully", name)
+		}
+	}(containerName)
 }
 
 // WaitingPage serves a waiting HTML page for a container or group.
@@ -340,7 +369,8 @@ func (rc *RuntimeController) serveWaitingPage(c *gin.Context, containerName, red
 func (rc *RuntimeController) ListContainers(c *gin.Context) {
 	names, err := rc.runtime.ListContainers(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		logger.WithComponent("runtime_controller").Errorf("failed to list containers: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to list containers"})
 		return
 	}
 	c.JSON(http.StatusOK, names)

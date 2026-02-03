@@ -143,17 +143,20 @@ func (cc *ContainerController) Ready(c *gin.Context) {
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, containerURL, nil)
 	if err != nil {
-		logger.WithComponent("container-controller").Warnf("ready: failed to create request for %s: %v", container.Name, err)
+		logger.WithComponent("container-controller").Warnf("ready: failed to create request for %s and url %s: %v", container.Name, containerURL, err)
 		c.JSON(http.StatusOK, gin.H{"ready": false})
 		return
 	}
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.WithComponent("container-controller").Warnf("ready: request failed for %s: %v", container.Name, err)
+		logger.WithComponent("container-controller").Warnf("ready: request failed for %s and url %s: %v", container.Name, containerURL, err)
 		c.JSON(http.StatusOK, gin.H{"ready": false})
 		return
+	} else {
+		logger.WithComponent("container-controller").Debugf("ready: request succeeded for %s and url %s with status %d", container.Name, containerURL, resp.StatusCode)
 	}
+
 	defer func() {
 		_ = resp.Body.Close()
 	}()

@@ -18,10 +18,11 @@ func TestConfig_Validate_Valid(t *testing.T) {
 			CORSAllowedOrigins: "*",
 		},
 		Data: DataConfig{
-			FilePath:          "/tmp/config.json",
-			PersistInterval:   5 * time.Second,
-			SchedulingEnabled: true,
-			SchedulingPoll:    30 * time.Second,
+			FilePath:            "/tmp/config.json",
+			PersistInterval:     5 * time.Second,
+			SchedulingEnabled:   true,
+			SchedulingPoll:      30 * time.Second,
+			RefreshIntervalSecs: 60,
 		},
 		Misc: MiscConfig{
 			GinMode:      "release",
@@ -46,9 +47,10 @@ func TestConfig_Validate_EmptyFilePath(t *testing.T) {
 			RequestTimeout:  1000 * time.Millisecond,
 		},
 		Data: DataConfig{
-			FilePath:        "",
-			PersistInterval: 5 * time.Second,
-			SchedulingPoll:  30 * time.Second,
+			FilePath:            "",
+			PersistInterval:     5 * time.Second,
+			SchedulingPoll:      30 * time.Second,
+			RefreshIntervalSecs: 60,
 		},
 		Misc: MiscConfig{
 			SchedulingTZ: "Local",
@@ -83,9 +85,10 @@ func TestConfig_Validate_InvalidPort(t *testing.T) {
 					RequestTimeout:  1000 * time.Millisecond,
 				},
 				Data: DataConfig{
-					FilePath:        "/tmp/config.json",
-					PersistInterval: 5 * time.Second,
-					SchedulingPoll:  30 * time.Second,
+					FilePath:            "/tmp/config.json",
+					PersistInterval:     5 * time.Second,
+					SchedulingPoll:      30 * time.Second,
+					RefreshIntervalSecs: 60,
 				},
 				Misc: MiscConfig{
 					SchedulingTZ: "Local",
@@ -111,9 +114,10 @@ func TestConfig_Validate_InvalidPersistInterval(t *testing.T) {
 			RequestTimeout:  1000 * time.Millisecond,
 		},
 		Data: DataConfig{
-			FilePath:        "/tmp/config.json",
-			PersistInterval: 0,
-			SchedulingPoll:  30 * time.Second,
+			FilePath:            "/tmp/config.json",
+			PersistInterval:     0,
+			SchedulingPoll:      30 * time.Second,
+			RefreshIntervalSecs: 60,
 		},
 		Misc: MiscConfig{
 			SchedulingTZ: "Local",
@@ -206,9 +210,10 @@ func TestConfig_Validate_InvalidTimezone(t *testing.T) {
 			RequestTimeout:  1000 * time.Millisecond,
 		},
 		Data: DataConfig{
-			FilePath:        "/tmp/config.json",
-			PersistInterval: 5 * time.Second,
-			SchedulingPoll:  30 * time.Second,
+			FilePath:            "/tmp/config.json",
+			PersistInterval:     5 * time.Second,
+			SchedulingPoll:      30 * time.Second,
+			RefreshIntervalSecs: 60,
 		},
 		Misc: MiscConfig{
 			SchedulingTZ: "Invalid/Timezone",
@@ -236,9 +241,10 @@ func TestConfig_Validate_ValidTimezones(t *testing.T) {
 					RequestTimeout:  1000 * time.Millisecond,
 				},
 				Data: DataConfig{
-					FilePath:        "/tmp/config.json",
-					PersistInterval: 5 * time.Second,
-					SchedulingPoll:  30 * time.Second,
+					FilePath:            "/tmp/config.json",
+					PersistInterval:     5 * time.Second,
+					SchedulingPoll:      30 * time.Second,
+					RefreshIntervalSecs: 60,
 				},
 				Misc: MiscConfig{
 					SchedulingTZ: tz,

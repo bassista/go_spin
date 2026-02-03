@@ -55,7 +55,7 @@ func (d *DockerRuntime) IsRunning(ctx context.Context, containerName string) (bo
 		return false, nil
 	}
 	logger.WithComponent("docker").Debugf("container isRunning %t for : %s", inspect.Container.State.Running, containerName)
-	logger.WithComponent("docker").Debugf("container status %s for : %s", inspect.Container.State.Status, containerName)
+	logger.WithComponent("docker").Tracef("container status %s for : %s", inspect.Container.State.Status, containerName)
 	return inspect.Container.State.Running, nil
 }
 

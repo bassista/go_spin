@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/bassista/go_spin/internal/repository"
 	"github.com/gin-gonic/gin"
@@ -21,11 +22,15 @@ type mockContainerRuntime struct {
 	stopErr           error
 	isRunningErr      error
 	listErr           error
+	startCh           chan string // usato per sincronizzazione nei test
+	stopCh            chan string // usato per sincronizzazione stop nei test
 }
 
 func newMockRuntime() *mockContainerRuntime {
 	return &mockContainerRuntime{
 		runningContainers: make(map[string]bool),
+		startCh:           make(chan string, 10),
+		stopCh:            make(chan string, 10),
 	}
 }
 
@@ -45,6 +50,10 @@ func (m *mockContainerRuntime) Start(ctx context.Context, name string) error {
 		return m.startErr
 	}
 	m.runningContainers[name] = true
+	// Segnala che il container è stato avviato (per sincronizzazione test)
+	if m.startCh != nil {
+		m.startCh <- name
+	}
 	return nil
 }
 
@@ -55,6 +64,10 @@ func (m *mockContainerRuntime) Stop(ctx context.Context, name string) error {
 		return m.stopErr
 	}
 	m.runningContainers[name] = false
+	// Segnala che il container è stato fermato (per sincronizzazione test)
+	if m.stopCh != nil {
+		m.stopCh <- name
+	}
 	return nil
 }
 
@@ -251,7 +264,14 @@ func TestRuntimeController_StartContainer_Success(t *testing.T) {
 		t.Errorf("expected message 'container started', got %v", resp["message"])
 	}
 
-	// Verify container is now running in mock
+	// Attendi che la goroutine abbia effettivamente avviato il container
+	select {
+	case <-rt.startCh:
+		// ok
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for container to be started in mock")
+	}
+
 	if !rt.runningContainers["my-container"] {
 		t.Error("expected container to be marked as running in mock")
 	}
@@ -292,8 +312,9 @@ func TestRuntimeController_StartContainer_RuntimeError(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected status 500, got %d", w.Code)
+	// Ora la risposta è sempre 200 anche in caso di errore asincrono
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
 	}
 }
 
@@ -312,8 +333,9 @@ func TestRuntimeController_StartContainer_ContainerNotFound(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("expected status 404, got %d", w.Code)
+	// Ora la risposta è sempre 200 anche in caso di errore asincrono
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
 	}
 }
 
@@ -348,7 +370,14 @@ func TestRuntimeController_StopContainer_Success(t *testing.T) {
 		t.Errorf("expected message 'container stopped', got %v", resp["message"])
 	}
 
-	// Verify container is now stopped in mock
+	// Attendi che la goroutine abbia effettivamente fermato il container
+	select {
+	case <-rt.stopCh:
+		// ok
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for container to be stopped in mock")
+	}
+
 	if rt.runningContainers["my-container"] {
 		t.Error("expected container to be marked as stopped in mock")
 	}
@@ -389,8 +418,9 @@ func TestRuntimeController_StopContainer_RuntimeError(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected status 500, got %d", w.Code)
+	// Ora la risposta è sempre 200 anche in caso di errore asincrono
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
 	}
 }
 
@@ -409,8 +439,9 @@ func TestRuntimeController_StopContainer_ContainerNotFound(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("expected status 404, got %d", w.Code)
+	// Ora la risposta è sempre 200 anche in caso di errore asincrono
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
 	}
 }
 
@@ -446,6 +477,14 @@ func TestRuntimeController_FullLifecycle(t *testing.T) {
 		t.Errorf("failed to start container: %d", w.Code)
 	}
 
+	// Attendi che la goroutine abbia effettivamente avviato il container
+	select {
+	case <-rt.startCh:
+		// ok
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for container to be started in mock (lifecycle)")
+	}
+
 	// 3. Check status (should be running)
 	req = httptest.NewRequest(http.MethodGet, "/runtime/"+containerName+"/status", nil)
 	w = httptest.NewRecorder()
@@ -463,6 +502,14 @@ func TestRuntimeController_FullLifecycle(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("failed to stop container: %d", w.Code)
+	}
+
+	// Attendi che la goroutine abbia effettivamente fermato il container
+	select {
+	case <-rt.stopCh:
+		// ok
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for container to be stopped in mock (lifecycle)")
 	}
 
 	// 5. Check status (should be stopped)

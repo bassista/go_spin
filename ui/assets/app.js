@@ -1,6 +1,9 @@
 // go_spin UI - Alpine.js Application
 function app() {
     return {
+            // Auto-refresh interval (seconds)
+            refreshInterval: 60, // default 60 seconds
+            refreshTimer: null,
         // State
         activeTab: 'containers',
         containers: [],
@@ -59,6 +62,7 @@ function app() {
         // Initialize
         async init() {
             await this.loadAll();
+            this.startAutoRefresh();
         },
         
         async loadAll() {
@@ -69,12 +73,32 @@ function app() {
                 this.loadConfiguration()
             ]);
         },
+
+        // Start auto-refresh timer
+        startAutoRefresh() {
+            if (this.refreshTimer) {
+                clearInterval(this.refreshTimer);
+            }
+            this.refreshTimer = setInterval(() => {
+                this.loadAll();
+            }, this.refreshInterval * 1000);
+        },
+
+        // Allow changing refresh interval at runtime
+        setRefreshInterval(seconds) {
+            this.refreshInterval = seconds;
+            this.startAutoRefresh();
+        },
         
         async loadConfiguration() {
             try {
                 const res = await fetch(`${this.apiBase}/configuration`);
                 if (!res.ok) throw new Error(await res.text());
                 this.configuration = await res.json();
+                // Se il server fornisce refreshIntervalSec, aggiorna l'intervallo di refresh
+                if (this.configuration.refreshIntervalSec && Number.isFinite(this.configuration.refreshIntervalSec)) {
+                    this.setRefreshInterval(this.configuration.refreshIntervalSec);
+                }
             } catch (e) {
                 this.showError('Failed to load configuration: ' + e.message);
             }
@@ -169,7 +193,8 @@ function app() {
             this.containerForm.friendly_name = name;
             // Auto-populate URL based on configuration
             this.containerForm.url = this.generateContainerUrl(name);
-            this.showContainerSuggestions = false;
+            // Delay la chiusura per evitare conflitti con Alpine @click.away
+            setTimeout(() => { this.showContainerSuggestions = false; }, 100);
         },
         
         async openContainerModal(container = null) {
@@ -207,19 +232,17 @@ function app() {
                     running: this.containerForm.running,
                     active: this.containerForm.active
                 };
-                
                 const res = await fetch(`${this.apiBase}/container`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                
                 if (!res.ok) {
                     const err = await res.json();
                     throw new Error(err.error || 'Save failed');
                 }
-                
-                this.containers = await res.json();
+                // Dopo il salvataggio, ricarica i container per aggiornare lo stato running
+                await this.loadContainers();
                 this.showContainerModal = false;
                 this.showSuccess('Container saved successfully');
             } catch (e) {

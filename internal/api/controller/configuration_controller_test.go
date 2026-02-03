@@ -14,43 +14,49 @@ func TestConfigurationController_GetConfiguration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
-		name           string
-		baseUrl        string
-		expectedStatus int
-		expectedBody   ConfigurationResponse
+		name            string
+		baseUrl         string
+		refreshInterval int
+		expectedStatus  int
+		expectedBody    ConfigurationResponse
 	}{
 		{
-			name:           "returns configuration with baseUrl",
-			baseUrl:        "https://example.com",
-			expectedStatus: http.StatusOK,
-			expectedBody:   ConfigurationResponse{BaseUrl: "https://example.com"},
+			name:            "returns configuration with baseUrl",
+			baseUrl:         "https://example.com",
+			refreshInterval: 42,
+			expectedStatus:  http.StatusOK,
+			expectedBody:    ConfigurationResponse{BaseUrl: "https://example.com", RefreshIntervalSec: 42},
 		},
 		{
-			name:           "returns configuration with empty baseUrl",
-			baseUrl:        "",
-			expectedStatus: http.StatusOK,
-			expectedBody:   ConfigurationResponse{BaseUrl: ""},
+			name:            "returns configuration with empty baseUrl",
+			baseUrl:         "",
+			refreshInterval: 60,
+			expectedStatus:  http.StatusOK,
+			expectedBody:    ConfigurationResponse{BaseUrl: "", RefreshIntervalSec: 60},
 		},
 		{
-			name:           "returns configuration with baseUrl containing $1 token",
-			baseUrl:        "https://$1.my.domain.com",
-			expectedStatus: http.StatusOK,
-			expectedBody:   ConfigurationResponse{BaseUrl: "https://$1.my.domain.com"},
+			name:            "returns configuration with baseUrl containing $1 token",
+			baseUrl:         "https://$1.my.domain.com",
+			refreshInterval: 30,
+			expectedStatus:  http.StatusOK,
+			expectedBody:    ConfigurationResponse{BaseUrl: "https://$1.my.domain.com", RefreshIntervalSec: 30},
 		},
 		{
-			name:           "returns configuration with localhost baseUrl",
-			baseUrl:        "http://localhost/",
-			expectedStatus: http.StatusOK,
-			expectedBody:   ConfigurationResponse{BaseUrl: "http://localhost/"},
+			name:            "returns configuration with localhost baseUrl",
+			baseUrl:         "http://localhost/",
+			refreshInterval: 15,
+			expectedStatus:  http.StatusOK,
+			expectedBody:    ConfigurationResponse{BaseUrl: "http://localhost/", RefreshIntervalSec: 15},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create config with the test baseUrl
+			// Create config with the test baseUrl and refreshInterval
 			cfg := &config.Config{
 				Data: config.DataConfig{
-					BaseUrl: tt.baseUrl,
+					BaseUrl:             tt.baseUrl,
+					RefreshIntervalSecs: tt.refreshInterval,
 				},
 			}
 
@@ -85,6 +91,9 @@ func TestConfigurationController_GetConfiguration(t *testing.T) {
 			// Check response
 			if response.BaseUrl != tt.expectedBody.BaseUrl {
 				t.Errorf("expected baseUrl %q, got %q", tt.expectedBody.BaseUrl, response.BaseUrl)
+			}
+			if response.RefreshIntervalSec != tt.expectedBody.RefreshIntervalSec {
+				t.Errorf("expected refreshIntervalSec %d, got %d", tt.expectedBody.RefreshIntervalSec, response.RefreshIntervalSec)
 			}
 		})
 	}
