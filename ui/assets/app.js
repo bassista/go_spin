@@ -57,9 +57,14 @@ function app() {
         
         // API base URL (same origin)
         apiBase: '',
-            // Sorting and filtering for groups
-            groupSort: { key: 'name', asc: true },
-            groupFilter: { name: '' },
+        
+        // Sorting and filtering for containers
+        containerSort: { key: 'name', asc: true },
+        containerFilter: { name: '' },
+        
+        // Sorting and filtering for groups
+        groupSort: { key: 'name', asc: true },
+        groupFilter: { name: '' },
         
         // Server configuration
         configuration: {
@@ -97,6 +102,10 @@ function app() {
 
         // Allow changing refresh interval at runtime
         setRefreshInterval(seconds) {
+            // Only restart timer if interval actually changed
+            if (this.refreshInterval === seconds && this.refreshTimer) {
+                return;
+            }
             this.refreshInterval = seconds;
             this.startAutoRefresh();
         },
@@ -113,6 +122,10 @@ function app() {
 
         // Allow changing stats refresh interval at runtime
         setStatsRefreshInterval(seconds) {
+            // Only restart timer if interval actually changed
+            if (this.statsRefreshInterval === seconds && this.statsRefreshTimer) {
+                return;
+            }
             this.statsRefreshInterval = seconds;
             this.startStatsRefresh();
         },
@@ -164,6 +177,47 @@ function app() {
                 }
             } catch (e) {
                 this.showError('Failed to load configuration: ' + e.message);
+            }
+        },
+        
+        // Computed: filtered and sorted containers
+        get filteredSortedContainers() {
+            let arr = [...this.containers];
+            // Filtering
+            if (this.containerFilter.name.trim() !== '') {
+                arr = arr.filter(c => c.name.toLowerCase().includes(this.containerFilter.name.trim().toLowerCase()));
+            }
+            // Sorting
+            const { key, asc } = this.containerSort;
+            arr.sort((a, b) => {
+                let va, vb;
+                if (key === 'cpu') {
+                    va = this.containerStats[a.name]?.cpu ?? 0;
+                    vb = this.containerStats[b.name]?.cpu ?? 0;
+                } else if (key === 'mem') {
+                    va = this.containerStats[a.name]?.mem ?? 0;
+                    vb = this.containerStats[b.name]?.mem ?? 0;
+                } else if (key === 'active' || key === 'running') {
+                    va = !!a[key] ? 1 : 0;
+                    vb = !!b[key] ? 1 : 0;
+                } else {
+                    va = a[key] ? a[key].toString().toLowerCase() : '';
+                    vb = b[key] ? b[key].toString().toLowerCase() : '';
+                }
+                if (va < vb) return asc ? -1 : 1;
+                if (va > vb) return asc ? 1 : -1;
+                return 0;
+            });
+            return arr;
+        },
+        
+        // Change sorting for containers
+        sortContainersBy(key) {
+            if (this.containerSort.key === key) {
+                this.containerSort.asc = !this.containerSort.asc;
+            } else {
+                this.containerSort.key = key;
+                this.containerSort.asc = true;
             }
         },
         
@@ -475,6 +529,38 @@ function app() {
                 this.showSuccess('Group deleted');
             } catch (e) {
                 this.showError('Failed to delete group: ' + e.message);
+            }
+        },
+        
+        async startGroup(name) {
+            try {
+                const res = await fetch(`${this.apiBase}/group/${encodeURIComponent(name)}/start`, {
+                    method: 'POST'
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.error || 'Start failed');
+                }
+                this.showSuccess(`Starting group "${name}" containers....`);
+                await this.loadContainers();
+            } catch (e) {
+                this.showError('Failed to start group: ' + e.message);
+            }
+        },
+        
+        async stopGroup(name) {
+            try {
+                const res = await fetch(`${this.apiBase}/group/${encodeURIComponent(name)}/stop`, {
+                    method: 'POST'
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.error || 'Stop failed');
+                }
+                this.showSuccess(`Stopping group "${name}" containers....`);
+                await this.loadContainers();
+            } catch (e) {
+                this.showError('Failed to stop group: ' + e.message);
             }
         },
         

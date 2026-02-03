@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/bassista/go_spin/internal/cache"
 	"github.com/bassista/go_spin/internal/repository"
+	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/gin-gonic/gin"
 )
 
@@ -45,6 +47,32 @@ func (m *mockGroupStore) RemoveGroup(name string) (repository.DataDocument, erro
 	return repository.DataDocument{}, cache.ErrGroupNotFound
 }
 
+// mockGroupRuntime implements runtime.ContainerRuntime for testing
+type mockGroupRuntime struct {
+	startErr error
+	stopErr  error
+}
+
+func (m *mockGroupRuntime) IsRunning(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockGroupRuntime) Start(_ context.Context, _ string) error {
+	return m.startErr
+}
+
+func (m *mockGroupRuntime) Stop(_ context.Context, _ string) error {
+	return m.stopErr
+}
+
+func (m *mockGroupRuntime) ListContainers(_ context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockGroupRuntime) Stats(_ context.Context, _ string) (runtime.ContainerStats, error) {
+	return runtime.ContainerStats{}, nil
+}
+
 func TestGroupController_AllGroups(t *testing.T) {
 	active := true
 	store := &mockGroupStore{
@@ -55,8 +83,9 @@ func TestGroupController_AllGroups(t *testing.T) {
 			},
 		},
 	}
+	rt := &mockGroupRuntime{}
 
-	gc := NewGroupController(store)
+	gc := NewGroupController(context.Background(), store, rt)
 
 	r := gin.New()
 	r.GET("/groups", gc.AllGroups)
@@ -86,8 +115,9 @@ func TestGroupController_CreateOrUpdateGroup_Valid(t *testing.T) {
 			Groups: []repository.Group{},
 		},
 	}
+	rt := &mockGroupRuntime{}
 
-	gc := NewGroupController(store)
+	gc := NewGroupController(context.Background(), store, rt)
 
 	r := gin.New()
 	r.POST("/group", gc.CreateOrUpdateGroup)
@@ -113,7 +143,8 @@ func TestGroupController_CreateOrUpdateGroup_Valid(t *testing.T) {
 
 func TestGroupController_CreateOrUpdateGroup_InvalidPayload(t *testing.T) {
 	store := &mockGroupStore{}
-	gc := NewGroupController(store)
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
 
 	r := gin.New()
 	r.POST("/group", gc.CreateOrUpdateGroup)
@@ -131,7 +162,8 @@ func TestGroupController_CreateOrUpdateGroup_InvalidPayload(t *testing.T) {
 
 func TestGroupController_CreateOrUpdateGroup_ValidationError(t *testing.T) {
 	store := &mockGroupStore{}
-	gc := NewGroupController(store)
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
 
 	r := gin.New()
 	r.POST("/group", gc.CreateOrUpdateGroup)
@@ -157,7 +189,8 @@ func TestGroupController_CreateOrUpdateGroup_StoreError(t *testing.T) {
 	store := &mockGroupStore{
 		addErr: errors.New("store error"),
 	}
-	gc := NewGroupController(store)
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
 
 	r := gin.New()
 	r.POST("/group", gc.CreateOrUpdateGroup)
@@ -190,7 +223,8 @@ func TestGroupController_DeleteGroup_Success(t *testing.T) {
 			},
 		},
 	}
-	gc := NewGroupController(store)
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
 
 	r := gin.New()
 	r.DELETE("/group/:name", gc.DeleteGroup)
@@ -211,7 +245,8 @@ func TestGroupController_DeleteGroup_NotFound(t *testing.T) {
 			Groups: []repository.Group{},
 		},
 	}
-	gc := NewGroupController(store)
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
 
 	r := gin.New()
 	r.DELETE("/group/:name", gc.DeleteGroup)
@@ -228,7 +263,8 @@ func TestGroupController_DeleteGroup_NotFound(t *testing.T) {
 
 func TestGroupController_DeleteGroup_MissingName(t *testing.T) {
 	store := &mockGroupStore{}
-	gc := NewGroupController(store)
+	rt := &mockGroupRuntime{}
+	gc := NewGroupController(context.Background(), store, rt)
 
 	r := gin.New()
 	r.DELETE("/group/", gc.DeleteGroup)

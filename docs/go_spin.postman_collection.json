@@ -48,6 +48,25 @@
 			]
 		},
 		{
+			"name": "Configuration",
+			"item": [
+				{
+					"name": "Get Configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/configuration",
+							"host": ["{{baseUrl}}"],
+							"path": ["configuration"]
+						},
+						"description": "Get application configuration for the frontend. Returns baseUrl, spinUpUrl, refreshIntervalSec, and statsRefreshIntervalSec."
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Containers",
 			"item": [
 				{
@@ -98,6 +117,20 @@
 							"path": ["container", "{{containerName}}"]
 						},
 						"description": "Delete a container by name"
+					},
+					"response": []
+				},
+				{
+					"name": "Check Container Ready",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/container/{{containerName}}/ready",
+							"host": ["{{baseUrl}}"],
+							"path": ["container", "{{containerName}}", "ready"]
+						},
+						"description": "Check if a container is reachable and responding with HTTP 200. Returns {ready: true/false}."
 					},
 					"response": []
 				}
@@ -251,7 +284,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["runtime", "{{containerName}}", "status"]
 						},
-						"description": "Check if a container is currently running"
+						"description": "Check if a container is currently running. Returns {name, running: true/false}."
 					},
 					"response": []
 				},
@@ -265,7 +298,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["runtime", "{{containerName}}", "start"]
 						},
-						"description": "Start a Docker container"
+						"description": "Start a Docker container. The container is started in background."
 					},
 					"response": []
 				},
@@ -279,7 +312,49 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["runtime", "{{containerName}}", "stop"]
 						},
-						"description": "Stop a Docker container"
+						"description": "Stop a Docker container. The container is stopped in background."
+					},
+					"response": []
+				},
+				{
+					"name": "List Runtime Containers",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/runtime/containers",
+							"host": ["{{baseUrl}}"],
+							"path": ["runtime", "containers"]
+						},
+						"description": "List all containers present in the Docker runtime. Returns an array of container names."
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Container Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/runtime/stats",
+							"host": ["{{baseUrl}}"],
+							"path": ["runtime", "stats"]
+						},
+						"description": "Get CPU and memory statistics for all containers defined in the store. Returns an array with name, cpu_percent, memory_mb, and optional error for each container."
+					},
+					"response": []
+				},
+				{
+					"name": "Waiting Page (Start Container/Group)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/start/{{containerName}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["start", "{{containerName}}"]
+						},
+						"description": "Serves a waiting HTML page for a container or group. Starts containers in background if they are not running. The name parameter can be either a container name/friendly_name or a group name. Returns 404 if not found, 403 if not active."
 					},
 					"response": []
 				}

@@ -61,24 +61,47 @@
                     <button @click="openContainerModal()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">+ Add Container</button>
                 </div>
             </div>
-            
+            <!-- Filter UI -->
+            <div class="flex gap-4 mb-2">
+                <div>
+                    <input type="text" placeholder="Filter by Name" x-model="containerFilter.name" class="border rounded px-2 py-1 text-sm" />
+                </div>
+            </div>
             <div class="bg-white rounded-lg shadow overflow-hidden">
                 <table class="min-w-full">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Friendly Name</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer" @click="sortContainersBy('name')">
+                                Name
+                                <span x-show="containerSort.key === 'name'" x-text="containerSort.asc ? '▲' : '▼'" class="ml-1"></span>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer" @click="sortContainersBy('friendly_name')">
+                                Friendly Name
+                                <span x-show="containerSort.key === 'friendly_name'" x-text="containerSort.asc ? '▲' : '▼'" class="ml-1"></span>
+                            </th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SpinUp</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Active</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Running</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">CPU %</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">MEM (MB)</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer" @click="sortContainersBy('active')">
+                                Active
+                                <span x-show="containerSort.key === 'active'" x-text="containerSort.asc ? '▲' : '▼'" class="ml-1"></span>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer" @click="sortContainersBy('running')">
+                                Running
+                                <span x-show="containerSort.key === 'running'" x-text="containerSort.asc ? '▲' : '▼'" class="ml-1"></span>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer" @click="sortContainersBy('cpu')">
+                                CPU %
+                                <span x-show="containerSort.key === 'cpu'" x-text="containerSort.asc ? '▲' : '▼'" class="ml-1"></span>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer" @click="sortContainersBy('mem')">
+                                MEM (MB)
+                                <span x-show="containerSort.key === 'mem'" x-text="containerSort.asc ? '▲' : '▼'" class="ml-1"></span>
+                            </th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
-                        <template x-for="container in containers" :key="container.name">
+                        <template x-for="container in filteredSortedContainers" :key="container.name">
                             <tr>
                                 <td class="px-4 py-3 font-medium" x-text="container.name"></td>
                                 <td class="px-4 py-3" x-text="container.friendly_name"></td>
@@ -111,7 +134,7 @@
                                 </td>
                             </tr>
                         </template>
-                        <tr x-show="containers.length === 0">
+                        <tr x-show="filteredSortedContainers.length === 0">
                             <td colspan="9" class="px-4 py-8 text-center text-gray-500">No containers configured</td>
                         </tr>
                     </tbody>
@@ -168,6 +191,8 @@
                                 <td class="px-4 py-3 space-x-1">
                                     <button @click="openGroupModal(group)" class="text-blue-500 hover:text-blue-700">✏️</button>
                                     <button @click="deleteGroup(group.name)" class="text-red-500 hover:text-red-700">🗑️</button>
+                                    <button @click="startGroup(group.name)" class="text-green-500 hover:text-green-700" title="Start all containers">▶️</button>
+                                    <button @click="stopGroup(group.name)" class="text-orange-500 hover:text-orange-700" title="Stop all containers">⏹️</button>
                                 </td>
                             </tr>
                         </template>
