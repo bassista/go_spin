@@ -20,7 +20,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build -o /app/main ./cmd/server/main.go
 
 FROM alpine:3.20.1 AS prod
-RUN apk add --no-cache ca-certificates curl
+RUN apk add --no-cache su-exec
 
 WORKDIR /app
 
@@ -36,6 +36,15 @@ ENV WAITING_SERVER_PORT=${WAITING_SERVER_PORT}
 
 ENV GO_SPIN_DATA_BASE_URL="https://container.mydomain.com"
 ENV GO_SPIN_DATA_SPIN_UP_URL="https://up.mydomain.com/container"
+
+# Default UID/GID for the runtime user (overridable at `docker run -e UID=... -e GID=...`)
+ENV UID=1000
+ENV GID=1000
+
+# Copy entrypoint that ensures user/group exist and runs the process as that user
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 EXPOSE ${PORT}
 EXPOSE ${WAITING_SERVER_PORT}
