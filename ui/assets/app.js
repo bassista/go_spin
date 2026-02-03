@@ -9,6 +9,8 @@ function app() {
             statsRefreshTimer: null,
             // Container stats map (name -> {cpu, mem})
             containerStats: {},
+            // Container refresh loading state
+            isContainerRefreshing: false,
         // State
         activeTab: 'containers',
         containers: [],
@@ -149,6 +151,26 @@ function app() {
             } catch (e) {
                 // On error, don't show error to user, just reset stats
                 this.containerStats = {};
+            }
+        },
+
+        // Refresh containers and stats with loading state and client-side timeout (5 minutes)
+        async refreshContainersWithStats() {
+            if (this.isContainerRefreshing) return;
+            this.isContainerRefreshing = true;
+            const CLIENT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Client timeout: refresh took too long')), CLIENT_TIMEOUT_MS)
+            );
+            try {
+                await Promise.race([
+                    Promise.all([this.loadContainers(), this.loadContainerStats()]),
+                    timeoutPromise
+                ]);
+            } catch (e) {
+                this.showError('Failed to refresh: ' + e.message);
+            } finally {
+                this.isContainerRefreshing = false;
             }
         },
 

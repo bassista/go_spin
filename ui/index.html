@@ -11,6 +11,8 @@
         [x-cloak] { display: none !important; }
         .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
         .modal-backdrop { background-color: rgba(0,0,0,0.5); }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin { animation: spin 1s linear infinite; }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -57,7 +59,9 @@
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-semibold">Containers</h2>
                 <div class="space-x-2">
-                    <button @click="loadContainers()" class="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600">🔄 Refresh</button>
+                    <button @click="refreshContainersWithStats()" :disabled="isContainerRefreshing" :class="isContainerRefreshing ? 'bg-gray-400 cursor-not-allowed' : 'bg-gray-500 hover:bg-gray-600'" class="text-white px-3 py-1 rounded inline-flex items-center">
+                        <span :class="isContainerRefreshing ? 'animate-spin' : ''" class="mr-1">🔄</span> Refresh
+                    </button>
                     <button @click="openContainerModal()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">+ Add Container</button>
                 </div>
             </div>

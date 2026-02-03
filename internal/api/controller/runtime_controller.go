@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/bassista/go_spin/internal/cache"
 	"github.com/bassista/go_spin/internal/logger"
@@ -385,6 +386,7 @@ type ContainerStatsResponse struct {
 }
 
 // AllStats returns CPU and memory statistics for all containers defined in the store.
+// Stats are fetched in parallel to avoid sequential timeout accumulation.
 func (rc *RuntimeController) AllStats(c *gin.Context) {
 	doc, err := rc.containerStore.Snapshot()
 	if err != nil {
@@ -393,22 +395,52 @@ func (rc *RuntimeController) AllStats(c *gin.Context) {
 		return
 	}
 
-	results := make([]ContainerStatsResponse, 0, len(doc.Containers))
-	for _, container := range doc.Containers {
-		stats, err := rc.runtime.Stats(c.Request.Context(), container.Name)
-		if err != nil {
-			logger.WithComponent("runtime_controller").Warnf("failed to get stats for container %s: %v", container.Name, err)
-			results = append(results, ContainerStatsResponse{
-				Name:  container.Name,
-				Error: err.Error(),
-			})
-			continue
-		}
-		results = append(results, ContainerStatsResponse{
-			Name:       container.Name,
-			CPUPercent: stats.CPUPercent,
-			MemoryMB:   stats.MemoryMB,
-		})
+	// Fetch stats for all containers in parallel
+	type statsResult struct {
+		index int
+		resp  ContainerStatsResponse
+	}
+
+	resultChan := make(chan statsResult, len(doc.Containers))
+	ctx := c.Request.Context()
+
+	// Log context deadline for debugging
+	if deadline, ok := ctx.Deadline(); ok {
+		logger.WithComponent("runtime_controller").Debugf("AllStats context deadline: %v (in %v)", deadline, time.Until(deadline))
+	} else {
+		logger.WithComponent("runtime_controller").Debugf("AllStats context has no deadline")
+	}
+
+	for i, container := range doc.Containers {
+		go func(idx int, name string) {
+			stats, err := rc.runtime.Stats(ctx, name)
+			if err != nil {
+				logger.WithComponent("runtime_controller").Warnf("failed to get stats for container %s: %v", name, err)
+				resultChan <- statsResult{
+					index: idx,
+					resp: ContainerStatsResponse{
+						Name:  name,
+						Error: err.Error(),
+					},
+				}
+				return
+			}
+			resultChan <- statsResult{
+				index: idx,
+				resp: ContainerStatsResponse{
+					Name:       name,
+					CPUPercent: stats.CPUPercent,
+					MemoryMB:   stats.MemoryMB,
+				},
+			}
+		}(i, container.Name)
+	}
+
+	// Collect all results
+	results := make([]ContainerStatsResponse, len(doc.Containers))
+	for range doc.Containers {
+		res := <-resultChan
+		results[res.index] = res.resp
 	}
 
 	c.JSON(http.StatusOK, results)
