@@ -23,7 +23,7 @@ type App struct {
 
 	BaseCtx     context.Context
 	Cancel      context.CancelFunc
-	persistDone <-chan struct{} // segnala completamento persistence scheduler
+	persistDone <-chan struct{} // signal for completion of persistence scheduler
 }
 
 func New(cfg *config.Config, repo repository.Repository, store cache.AppStore, rt runtime.ContainerRuntime) (*App, error) {

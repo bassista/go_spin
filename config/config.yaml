@@ -6,6 +6,7 @@ data:
   file_path: ./config/data/config.json
   persist_interval_secs: 5
   base_url: "http://localhost/"  # Base URL for container URL generation, supports $1 token
+  spin_up_url: "http://localhost/"  # Base URL for container lazy startup URL generation, supports $1 token
   refresh_interval_secs: 60       # Interval for UI auto-refresh (seconds)
   stats_refresh_interval_secs: 120  # Interval for container stats refresh (seconds)
 misc:

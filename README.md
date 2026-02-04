@@ -19,7 +19,7 @@ go_spin is a Go application for scheduled management of Docker containers. Defin
 
 ### Prerequisites
 
-- Go 1.21+ 
+- Go 1.25.6+ 
 - Docker
 
 ### Installation
@@ -51,6 +51,7 @@ Create `config/config.yaml`:
 ```yaml
 server:
   port: 8084
+  waiting_server_port: 8085
   shutdown_timeout_secs: 5
   read_timeout_secs: 10
   write_timeout_secs: 10
@@ -58,15 +59,13 @@ server:
 
 data:
   file_path: ./config/data/config.json
-  persist_interval_secs: 5
+  persist_interval_secs: 5 #how often to persist data to file
   base_url: "http://localhost/"  # Base URL for container URL generation, supports $1 token
+  spin_up_url: "http://localhost/"  # Base URL for container lazy startup URL generation supports $1 token
 
 misc:
-  gin_mode: release              # "debug" or "release"
-  scheduling_enabled: true
+  scheduling_enabled: true       # Enable/disable automatic containers starting/stopping based on schedules
   scheduling_poll_interval_secs: 30
-  scheduling_timezone: "Local"   # or "Europe/Rome", "UTC", etc.
-  runtime_type: docker           # "docker" or "memory"
   cors_allowed_origins: "*"      # CORS origins, default "*"
 ```
 
@@ -77,40 +76,26 @@ All settings can be overridden via environment variables with prefix `GO_SPIN_`:
 ```bash
 # Server port
 PORT=8084
-
-# Gin mode
-GO_SPIN_MISC_GIN_MODE=debug
-
-# Runtime type (docker or memory for testing)
-GO_SPIN_MISC_RUNTIME_TYPE=docker
-
+# Log level
+GO_SPIN_MISC_LOG_LEVEL=debug
 # CORS allowed origins
 GO_SPIN_MISC_CORS_ALLOWED_ORIGINS=*
-
 # Config path
 GO_SPIN_CONFIG_PATH=./config
 ```
+### Base URL for Container Links
+
+The `baseUrl` field is used by the Web UI to auto-generate container URLs when selecting a container name:
+- If `baseUrl` is empty → `http://localhost/{name}`
+- If `baseUrl` does not contain `$1` → `{baseUrl}/{name}` (removes double slashes)
+- If `baseUrl` contains `$1` → replaces `$1` with the container name (e.g., `https://$1.my.domain.com` → `https://Deluge.my.domain.com`)
 
 # Waiting server port
-You can configure an auxiliary "waiting" HTTP server used by the `/runtime/:name/waiting` endpoint. This server serves the waiting HTML page (spinner + redirect) while a container or group is being started.
+You can configure an auxiliary "waiting" HTTP server used by the `/runtime/:name/waiting` endpoint. This server serves only the waiting HTML page (spinner + redirect) endpoint while a container or group is being started in background.
 
 ```bash
 # Port used by the waiting server (default 8085)
 WAITING_SERVER_PORT=8085
-```
-
-### .env File
-
-Environment variables can be provided also via .env file.
-Create a `.env` file in the project root:
-
-```env
-PORT=8084
-GO_SPIN_MISC_GIN_MODE=debug
-GO_SPIN_MISC_RUNTIME_TYPE=memory
-GO_SPIN_MISC_SCHEDULING_ENABLED=true
-GO_SPIN_DATA_PERSIST_INTERVAL_SECS=5
-GO_SPIN_MISC_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8084
 ```
 
 ## 🔒 Security
@@ -131,13 +116,13 @@ go_spin requires access to the Docker socket (`/var/run/docker.sock`). This gran
 - **Development**: Use `runtime_type: memory` for testing without Docker access
 - **Production**: Consider running in a restricted environment or using Docker-in-Docker
 - **Container mode**: Mount Docker socket as read-only when possible
+- **User Permissions**: Run go_spin under a user with limited permissions and add it to the `docker` group. Provide userId and groupId as Environment Variables when running in Docker (UID and GID environment variables).
 
 ### File System Permissions
 
 Ensure proper permissions for:
 - Configuration directory: `config/` (read-write)
 - Data file: `config/data/config.json` (read-write)
-- Log directory (if file logging is enabled)
 
 ```bash
 # Recommended permissions
@@ -146,265 +131,9 @@ chmod 640 config/config.yaml
 chmod 660 config/data/config.json
 ```
 
-## 📡 API Reference
-
-### Base URL
-```
-http://localhost:8084
-```
-
-### Authentication
-Currently, no authentication is required. In production environments, consider implementing reverse proxy authentication.
-
-### Content Types
-- **Request**: `application/json`
-- **Response**: `application/json` (except for UI and waiting endpoints)
-
-### Standard HTTP Status Codes
-- `200 OK` - Success
-- `201 Created` - Resource created successfully
-- `400 Bad Request` - Invalid request data
-- `404 Not Found` - Resource not found
-- `403 Forbidden` - Resource not active/available
-- `500 Internal Server Error` - Server error
-
 ---
 
-### Health & Status
-
-#### GET `/health`
-Basic health check endpoint.
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "timestamp": "2024-02-04T10:30:00Z"
-}
-```
-
----
-
-### Container Management
-
-#### GET `/containers`
-Retrieve all containers with their current status.
-
-**Response:**
-```json
-[
-  {
-    "name": "nginx",
-    "friendly_name": "Web Server", 
-    "url": "http://localhost:8080",
-    "running": true,
-    "active": true
-  },
-  {
-    "name": "redis",
-    "friendly_name": "Cache Server",
-    "url": "http://localhost:6379", 
-    "running": false,
-    "active": true
-  }
-]
-```
-
-#### POST `/container`
-Create or update a container configuration.
-
-**Request Body:**
-```json
-{
-  "name": "nginx",
-  "friendly_name": "Web Server",
-  "url": "http://localhost:8080",
-  "active": true
-}
-```
-
-**Validation Rules:**
-- `name`: Required, unique identifier
-- `friendly_name`: Optional display name
-- `url`: Optional, must be valid URL if provided
-- `active`: Boolean, defaults to true
-
-#### DELETE `/container/:name`
-Remove a container from configuration.
-
-**Parameters:**
-- `name` (path): Container name to delete
-
----
-
-### Group Management
-
-#### GET `/groups`
-Retrieve all container groups.
-
-**Response:**
-```json
-[
-  {
-    "name": "WebStack",
-    "containers": ["nginx", "redis", "postgres"],
-    "active": true
-  }
-]
-```
-
-#### POST `/group`
-Create or update a container group.
-
-**Request Body:**
-```json
-{
-  "name": "WebStack",
-  "containers": ["nginx", "redis"],
-  "active": true
-}
-```
-
-**Validation Rules:**
-- `name`: Required, unique identifier
-- `containers`: Array of existing container names
-- `active`: Boolean, defaults to true
-
-#### DELETE `/group/:name`
-Remove a group from configuration.
-
----
-
-### Schedule Management
-
-#### GET `/schedules`
-Retrieve all configured schedules.
-
-**Response:**
-```json
-[
-  {
-    "id": "schedule-001",
-    "target": "nginx",
-    "targetType": "container",
-    "timers": [
-      {
-        "startTime": "08:00",
-        "stopTime": "18:00", 
-        "days": [1, 2, 3, 4, 5],
-        "active": true
-      }
-    ]
-  }
-]
-```
-
-#### POST `/schedule`
-Create or update a schedule.
-
-**Request Body:**
-```json
-{
-  "id": "schedule-001",
-  "target": "nginx",
-  "targetType": "container",
-  "timers": [
-    {
-      "startTime": "08:00",
-      "stopTime": "18:00",
-      "days": [1, 2, 3, 4, 5],
-      "active": true
-    }
-  ]
-}
-```
-
-**Validation Rules:**
-- `target`: Must reference existing container or group
-- `targetType`: Either "container" or "group"  
-- `timers[].startTime/stopTime`: Format "HH:MM" (24-hour)
-- `timers[].days`: Array of integers (0=Sunday, 6=Saturday)
-
-#### DELETE `/schedule/:id`
-Remove a schedule.
-
----
-
-### Runtime Control
-
-#### GET `/runtime/:name/status`
-Check if a container or group is currently running.
-
-**Response:**
-```json
-{
-  "name": "nginx",
-  "running": true,
-  "containerStatuses": [
-    {
-      "container": "nginx",
-      "running": true
-    }
-  ]
-}
-```
-
-#### POST `/runtime/:name/start`
-Start a container or all containers in a group.
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Container nginx started successfully",
-  "details": {
-    "started": ["nginx"],
-    "failed": []
-  }
-}
-```
-
-#### POST `/runtime/:name/stop`
-Stop a container or all containers in a group.
-
-#### GET `/runtime/:name/waiting`
-**Special endpoint** that serves an HTML waiting page with automatic redirect.
-
-**Features:**
-- Starts container/group if not running
-- Returns HTML page with spinner
-- Auto-redirects when ready
-- Template variables: `{{CONTAINER_NAME}}`, `{{REDIRECT_URL}}`
-
-**Response Codes:**
-- `404` - Container/group not found
-- `403` - Container/group not active
-- `200` - HTML waiting page
-
----
-
-### Configuration
-
-#### GET `/configuration`
-Retrieve frontend configuration settings.
-
-**Response:**
-```json
-{
-  "baseUrl": "https://$1.my.domain.com",
-  "refreshIntervalSecs": 30,
-  "schedulingEnabled": true
-}
-```
-
-**Base URL Template Patterns:**
-- Empty: `http://localhost/{name}`
-- No `$1`: `{baseUrl}/{name}`
-- With `$1`: Replace with container name
-
----
-
-### Web UI
+## 🖥️ Web UI
 
 #### GET `/ui`
 Single Page Application interface.
@@ -412,7 +141,67 @@ Single Page Application interface.
 #### GET `/ui/assets/*`
 Static assets (CSS, JS, images).
 
----
+The web interface provides visual management for:
+
+| Tab | Features |
+|-----|----------|
+| **Containers** | List, Add, Edit, Delete, Start/Stop |
+| **Groups** | List, Add, Edit, Delete, Multi-select containers |
+| **Schedules** | List, Add, Edit, Delete, Full timer editor with day selection |
+
+Access the UI at `http://localhost:8084/ui`
+
+### UI Features
+
+- **Real-time Status**: Container running status updates automatically
+- **Bulk Operations**: Select multiple containers for group operations
+- **Schedule Visualization**: Visual day selector for timer configuration
+- **URL Generation**: Auto-generates container URLs based on `base_url` configuration
+- **Responsive Design**: Works on desktop and mobile devices
+- **Error Handling**: User-friendly error messages for failed operations
+
+## 📡 API Endpoints
+
+### Health
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+
+### Containers
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/containers` | List all containers |
+| POST | `/container` | Create/update container |
+| DELETE | `/container/:name` | Delete container |
+
+### Groups
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/groups` | List all groups |
+| POST | `/group` | Create/update group |
+| DELETE | `/group/:name` | Delete group |
+
+### Schedules
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/schedules` | List all schedules |
+| POST | `/schedule` | Create/update schedule |
+| DELETE | `/schedule/:id` | Delete schedule |
+
+
+### Runtime Control
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/runtime/:name/status` | Check if container is running |
+| POST | `/runtime/:name/start` | Start container |
+| POST | `/runtime/:name/stop` | Stop container |
+| GET | `/runtime/:name/waiting` | Serve waiting HTML page for a container or group (starts if not running) |
+
+### Configuration
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/configuration` | Get application configuration for frontend |
+
 
 ### API Examples
 
@@ -441,68 +230,6 @@ curl -X POST http://localhost:8084/schedule \
     "timers": [{"startTime":"08:00","stopTime":"18:00","days":[1,2,3,4,5],"active":true}]
   }'
 ```
-
-## 📦 Data Models
-
-### Container
-```json
-{
-  "name": "nginx",
-  "friendly_name": "Web Server",
-  "url": "http://localhost:8080",
-  "running": false,
-  "active": true
-}
-```
-
-### Group
-```json
-{
-  "name": "WebStack",
-  "container": ["nginx", "redis"],
-  "active": true
-}
-```
-
-### Schedule
-```json
-{
-  "id": "schedule-001",
-  "target": "nginx",
-  "targetType": "container",
-  "timers": [
-    {
-      "startTime": "08:00",
-      "stopTime": "18:00",
-      "days": [1, 2, 3, 4, 5],
-      "active": true
-    }
-  ]
-}
-```
-
-> **Days**: 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-
-## 🖥️ Web UI
-
-The web interface provides visual management for:
-
-| Tab | Features |
-|-----|----------|
-| **Containers** | List, Add, Edit, Delete, Start/Stop |
-| **Groups** | List, Add, Edit, Delete, Multi-select containers |
-| **Schedules** | List, Add, Edit, Delete, Full timer editor with day selection |
-
-Access the UI at `http://localhost:8084/ui`
-
-### UI Features
-
-- **Real-time Status**: Container running status updates automatically
-- **Bulk Operations**: Select multiple containers for group operations
-- **Schedule Visualization**: Visual day selector for timer configuration
-- **URL Generation**: Auto-generates container URLs based on `base_url` configuration
-- **Responsive Design**: Works on desktop and mobile devices
-- **Error Handling**: User-friendly error messages for failed operations
 
 ## 🔧 Troubleshooting
 
@@ -576,27 +303,16 @@ Enable debug mode for verbose logging:
 ```yaml
 misc:
   gin_mode: debug
+  log_level: debug
 ```
 
 Or via environment:
 ```bash
 GO_SPIN_MISC_GIN_MODE=debug ./main
+GO_SPIN_MISC_LOG_LEVEL=debug ./main
 ```
 
-### Health Check
-
-Monitor application health:
-
-```bash
-# Quick health check
-curl http://localhost:8084/health
-
-# Detailed status with jq
-curl -s http://localhost:8084/containers | jq '.'
-
-# Check running containers
-curl -s http://localhost:8084/containers | jq '.[] | select(.running == true)'
-```
+---
 
 ## 🛠️ Development
 
@@ -614,6 +330,7 @@ air -c .air_win.toml
 
 ```bash
 # Development with hot-reload
+docker-compose -f dev.docker-compose.yml build
 docker-compose -f dev.docker-compose.yml up
 
 # Production
@@ -675,36 +392,13 @@ go_spin/
 - Asynchronous background process persists only when changes exist
 - **Benefits**: Non-blocking API responses, batched I/O operations
 
-#### 3. **Interface-Driven Design**
-```go
-type ContainerRuntime interface {
-    Start(name string) error
-    Stop(name string) error
-    IsRunning(name string) bool
-}
 
-type Repository interface {
-    Load() (*DataDocument, error)
-    Save(*DataDocument) error
-}
-
-type AppStore interface {
-    GetDocument() *DataDocument
-    MarkDirty()
-}
-```
-
-#### 4. **Event-Driven Persistence**
+#### 3. **Event-Driven Persistence**
 - `fsnotify` watches configuration file changes
 - Auto-reload on external modifications
 - Optimistic locking with `lastUpdate` timestamps
 - Conflict detection and resolution
 
-#### 5. **Factory Pattern for Runtime**
-```go
-runtime := runtime.NewRuntimeFromConfig(cfg.RuntimeType, store)
-// Returns either DockerRuntime or MemoryRuntime
-```
 
 ### Data Flow
 
@@ -746,60 +440,30 @@ graph TD
 | **File Watching** | External integration | File system dependency |
 | **Polling Scheduler** | Simple implementation | Not event-driven |
 
-## � Performance & Monitoring
-
-### Key Metrics
-
-| Metric | Endpoint | Description |
-|--------|----------|-------------|
-| **Health** | `GET /health` | Basic application health |
-| **Container Status** | `GET /containers` | All containers with status |
-| **Active Schedules** | `GET /schedules` | Currently configured schedules |
 
 ### Performance Characteristics
 
 - **API Response Time**: < 50ms for data operations (cached)
-- **Container Start Time**: 2-10 seconds (depends on Docker image)
+- **Container Start Time**: 1-10 seconds (depends on Docker image)
 - **File Persistence**: Async, does not block API calls
-- **Memory Usage**: ~10-50MB (depends on container count)
+- **Memory Usage**: ~20-60MB (depends on container count)
 - **Scheduling Precision**: ±30 seconds (configurable poll interval)
 
-### Monitoring Best Practices
-
-```bash
-# Monitor application logs
-tail -f go_spin.log | grep -E "ERROR|WARN"
-
-# Check container operation times
-curl -s http://localhost:8084/containers | jq '.[] | {name, running, active}'
-
-# Monitor Docker resource usage
-docker stats --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"
-
-# Check schedule execution
-grep -i "schedule" go_spin.log | tail -20
-```
 
 ### Resource Requirements
 
 #### Minimum
 - **CPU**: 1 core (shared)
-- **RAM**: 256MB
+- **RAM**: 32MB
 - **Disk**: 100MB
 - **Network**: 1 Mbps
 
 #### Recommended Production
 - **CPU**: 2 cores
-- **RAM**: 512MB
-- **Disk**: 1GB (for logs)
+- **RAM**: 64MB
+- **Disk**: 200MB (for logs)
 - **Network**: 10 Mbps
 
-### Scaling Considerations
-
-- **Container Limit**: No hard limit, tested with 100+ containers
-- **Schedule Limit**: Recommended < 50 active schedules
-- **Concurrent Operations**: Limited by Docker daemon capacity
-- **File I/O**: Persistence interval affects performance vs durability
 
 ## 🚀 Production Deployment
 
@@ -807,16 +471,15 @@ grep -i "schedule" go_spin.log | tail -20
 
 ```yaml
 # docker-compose.prod.yml
-version: '3.8'
 services:
   go-spin:
     image: go-spin:latest
     ports:
       - "8084:8084"
+      - "8085:8085"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       - ./config:/app/config
-      - ./data:/app/data
     environment:
       - GO_SPIN_MISC_GIN_MODE=release
       - GO_SPIN_MISC_CORS_ALLOWED_ORIGINS=https://your-domain.com
@@ -826,58 +489,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-```
-
-### Reverse Proxy (Nginx)
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    
-    location / {
-        proxy_pass http://localhost:8084;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    
-    # Increase timeout for container operations
-    location /runtime/ {
-        proxy_pass http://localhost:8084;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
-    }
-}
-```
-
-### Systemd Service
-
-```ini
-# /etc/systemd/system/go-spin.service
-[Unit]
-Description=go_spin Container Manager
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=simple
-User=gospin
-Group=docker
-WorkingDirectory=/opt/go-spin
-ExecStart=/opt/go-spin/main
-Restart=always
-RestartSec=10
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ReadWritePaths=/opt/go-spin/config /opt/go-spin/data
-
-[Install]
-WantedBy=multi-user.target
 ```
 
 ## 📄 License
