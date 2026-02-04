@@ -31,13 +31,11 @@ func SetupRoutes(r *gin.Engine, appCtx *app.App) {
 	// All Public APIs
 	publicRouter := r.Group("")
 
-	timeout := appCtx.Config.Server.RequestTimeout
-
-	NewContainerRouter(appCtx.BaseCtx, timeout, publicRouter, appCtx.Cache, appCtx.Runtime)
-	NewGroupRouter(appCtx.BaseCtx, timeout, publicRouter, appCtx.Cache, appCtx.Runtime)
-	NewScheduleRouter(timeout, publicRouter, appCtx.Cache)
-	NewRuntimeRouter(appCtx.BaseCtx, timeout, appCtx.Config.Server.ReadTimeout, publicRouter, appCtx.Runtime, appCtx.Cache)
-	NewConfigurationRouter(timeout, publicRouter, appCtx.Config)
+	NewContainerRouter(appCtx, publicRouter)
+	NewGroupRouter(appCtx, publicRouter)
+	NewScheduleRouter(appCtx, publicRouter)
+	NewRuntimeRouter(appCtx, publicRouter)
+	NewConfigurationRouter(appCtx, publicRouter)
 
 	// UI static files
 	NewUIRouter(r)

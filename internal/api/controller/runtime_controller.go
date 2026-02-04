@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bassista/go_spin/internal/app"
 	"github.com/bassista/go_spin/internal/cache"
+	"github.com/bassista/go_spin/internal/config"
 	"github.com/bassista/go_spin/internal/logger"
 	"github.com/bassista/go_spin/internal/repository"
 	"github.com/bassista/go_spin/internal/runtime"
@@ -21,12 +23,13 @@ const DefaultWaitingTemplatePath = "./ui/templates/waiting.html"
 type RuntimeController struct {
 	runtime         runtime.ContainerRuntime
 	containerStore  cache.ContainerStore
-	waitingTemplate string
+	config          *config.Config
 	baseCtx         context.Context
+	waitingTemplate string
 }
 
 // NewRuntimeController creates a new RuntimeController with the waiting template loaded from file.
-func NewRuntimeController(baseCtx context.Context, rt runtime.ContainerRuntime, store cache.ContainerStore) *RuntimeController {
+func NewRuntimeController(appCtx *app.App) *RuntimeController {
 	templateContent, err := os.ReadFile(DefaultWaitingTemplatePath)
 	if err != nil {
 		logger.WithComponent("runtime_controller").Warnf("failed to load waiting template from %s: %v", DefaultWaitingTemplatePath, err)
@@ -36,10 +39,11 @@ func NewRuntimeController(baseCtx context.Context, rt runtime.ContainerRuntime, 
 	}
 
 	return &RuntimeController{
-		runtime:         rt,
-		containerStore:  store,
+		runtime:         appCtx.Runtime,
+		containerStore:  appCtx.Cache,
+		baseCtx:         appCtx.BaseCtx,
+		config:          appCtx.Config,
 		waitingTemplate: string(templateContent),
-		baseCtx:         baseCtx,
 	}
 }
 
@@ -230,6 +234,24 @@ func (rc *RuntimeController) WaitingPage(c *gin.Context) {
 	group, found := rc.findGroup(doc, name)
 	if found {
 		rc.handleGroupWaitingPage(c, doc, group)
+		return
+	}
+
+	// Check if container with that name exists in runtime
+	found = true
+	_, errRuntime := rc.runtime.IsRunning(c.Request.Context(), name)
+	if errRuntime != nil {
+		found = false
+	}
+
+	if found {
+		containerFromRuntime := &repository.Container{
+			Name:         name,
+			FriendlyName: name,
+			URL:          strings.ReplaceAll(rc.config.Data.BaseUrl, "$1", name),
+			Active:       func(b bool) *bool { return &b }(true),
+		}
+		rc.handleContainerWaitingPage(c, containerFromRuntime)
 		return
 	}
 

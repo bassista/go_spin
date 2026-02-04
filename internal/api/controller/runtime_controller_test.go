@@ -10,10 +10,82 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bassista/go_spin/internal/app"
+	"github.com/bassista/go_spin/internal/cache"
+	"github.com/bassista/go_spin/internal/config"
 	"github.com/bassista/go_spin/internal/repository"
 	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/gin-gonic/gin"
 )
+
+// mockAppStore implements cache.AppStore for testing
+type mockAppStore struct {
+	doc       repository.DataDocument
+	addErr    error
+	removeErr error
+}
+
+func (m *mockAppStore) Snapshot() (repository.DataDocument, error) { return m.doc, nil }
+func (m *mockAppStore) GetLastUpdate() int64                       { return 0 }
+func (m *mockAppStore) IsDirty() bool                              { return false }
+func (m *mockAppStore) Replace(doc repository.DataDocument) error  { m.doc = doc; return nil }
+func (m *mockAppStore) AddContainer(c repository.Container) (repository.DataDocument, error) {
+	if m.addErr != nil {
+		return repository.DataDocument{}, m.addErr
+	}
+	m.doc.Containers = append(m.doc.Containers, c)
+	return m.doc, nil
+}
+func (m *mockAppStore) RemoveContainer(name string) (repository.DataDocument, error) {
+	if m.removeErr != nil {
+		return repository.DataDocument{}, m.removeErr
+	}
+	for i, c := range m.doc.Containers {
+		if c.Name == name {
+			m.doc.Containers = append(m.doc.Containers[:i], m.doc.Containers[i+1:]...)
+			return m.doc, nil
+		}
+	}
+	return repository.DataDocument{}, errors.New("not found")
+}
+func (m *mockAppStore) AddGroup(g repository.Group) (repository.DataDocument, error) {
+	m.doc.Groups = append(m.doc.Groups, g)
+	return m.doc, nil
+}
+func (m *mockAppStore) RemoveGroup(name string) (repository.DataDocument, error) {
+	for i, g := range m.doc.Groups {
+		if g.Name == name {
+			m.doc.Groups = append(m.doc.Groups[:i], m.doc.Groups[i+1:]...)
+			return m.doc, nil
+		}
+	}
+	return repository.DataDocument{}, errors.New("not found")
+}
+func (m *mockAppStore) AddSchedule(s repository.Schedule) (repository.DataDocument, error) {
+	m.doc.Schedules = append(m.doc.Schedules, s)
+	return m.doc, nil
+}
+func (m *mockAppStore) RemoveSchedule(id string) (repository.DataDocument, error) {
+	for i, s := range m.doc.Schedules {
+		if s.ID == id {
+			m.doc.Schedules = append(m.doc.Schedules[:i], m.doc.Schedules[i+1:]...)
+			return m.doc, nil
+		}
+	}
+	return repository.DataDocument{}, errors.New("not found")
+}
+func (m *mockAppStore) ClearDirty()            {}
+func (m *mockAppStore) SetLastUpdate(ts int64) {}
+
+// newTestAppCtx creates an *app.App for testing with the given runtime and store
+func newTestAppCtx(rt runtime.ContainerRuntime, store cache.AppStore) *app.App {
+	return &app.App{
+		Config:  &config.Config{},
+		Cache:   store,
+		Runtime: rt,
+		BaseCtx: context.Background(),
+	}
+}
 
 // mockContainerRuntime implements runtime.ContainerRuntime for testing
 type mockContainerRuntime struct {
@@ -101,8 +173,8 @@ func (m *mockContainerRuntime) Stats(ctx context.Context, containerName string) 
 }
 
 // newMockStoreWithContainer creates a mock store with a container
-func newMockStoreWithContainer(name string) *mockContainerStore {
-	return &mockContainerStore{
+func newMockStoreWithContainer(name string) *mockAppStore {
+	return &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: []repository.Container{
 				{Name: name},
@@ -114,8 +186,8 @@ func newMockStoreWithContainer(name string) *mockContainerStore {
 // Test for snapshot error
 
 // newMockStoreEmpty creates an empty mock store
-func newMockStoreEmpty() *mockContainerStore {
-	return &mockContainerStore{
+func newMockStoreEmpty() *mockAppStore {
+	return &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: []repository.Container{},
 		},
@@ -126,7 +198,7 @@ func TestRuntimeController_IsRunning_Success(t *testing.T) {
 	rt := newMockRuntime()
 	rt.runningContainers["my-container"] = true
 
-	store := &mockContainerStore{
+	store := &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: []repository.Container{
 				{Name: "my-container"},
@@ -134,7 +206,7 @@ func TestRuntimeController_IsRunning_Success(t *testing.T) {
 		},
 	}
 
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -166,7 +238,7 @@ func TestRuntimeController_IsRunning_NotRunning(t *testing.T) {
 	rt.runningContainers["stopped-container"] = false
 
 	store := newMockStoreWithContainer("stopped-container")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -193,7 +265,7 @@ func TestRuntimeController_IsRunning_NotRunning(t *testing.T) {
 func TestRuntimeController_IsRunning_MissingName(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreEmpty()
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	// Test with empty name param - controller validates and returns 400
@@ -216,7 +288,7 @@ func TestRuntimeController_IsRunning_RuntimeError(t *testing.T) {
 	rt.isRunningErr = errors.New("docker connection failed")
 
 	store := newMockStoreWithContainer("my-container")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -236,7 +308,7 @@ func TestRuntimeController_IsRunning_ContainerNotFound(t *testing.T) {
 	rt.isRunningErr = errors.New("container nonexistent not found")
 
 	store := newMockStoreWithContainer("nonexistent")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -254,7 +326,7 @@ func TestRuntimeController_IsRunning_ContainerNotFound(t *testing.T) {
 func TestRuntimeController_StartContainer_Success(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreWithContainer("my-container")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.POST("/runtime/:name/start", rc.StartContainer)
@@ -296,7 +368,7 @@ func TestRuntimeController_StartContainer_Success(t *testing.T) {
 func TestRuntimeController_StartContainer_MissingName(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreEmpty()
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	// Test with empty name param - controller validates and returns 400
@@ -318,7 +390,7 @@ func TestRuntimeController_StartContainer_RuntimeError(t *testing.T) {
 	rt.startErr = errors.New("docker daemon unavailable")
 
 	store := newMockStoreWithContainer("my-container")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.POST("/runtime/:name/start", rc.StartContainer)
@@ -339,7 +411,7 @@ func TestRuntimeController_StartContainer_ContainerNotFound(t *testing.T) {
 	rt.startErr = errors.New("error starting container nonexistent: container not found")
 
 	store := newMockStoreWithContainer("nonexistent")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.POST("/runtime/:name/start", rc.StartContainer)
@@ -360,7 +432,7 @@ func TestRuntimeController_StopContainer_Success(t *testing.T) {
 	rt.runningContainers["my-container"] = true
 
 	store := newMockStoreWithContainer("my-container")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.POST("/runtime/:name/stop", rc.StopContainer)
@@ -402,7 +474,7 @@ func TestRuntimeController_StopContainer_Success(t *testing.T) {
 func TestRuntimeController_StopContainer_MissingName(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreEmpty()
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	// Test with empty name param - controller validates and returns 400
@@ -424,7 +496,7 @@ func TestRuntimeController_StopContainer_RuntimeError(t *testing.T) {
 	rt.stopErr = errors.New("container already stopped")
 
 	store := newMockStoreWithContainer("my-container")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.POST("/runtime/:name/stop", rc.StopContainer)
@@ -445,7 +517,7 @@ func TestRuntimeController_StopContainer_ContainerNotFound(t *testing.T) {
 	rt.stopErr = errors.New("error stopping container nonexistent: container not found")
 
 	store := newMockStoreWithContainer("nonexistent")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.POST("/runtime/:name/stop", rc.StopContainer)
@@ -464,7 +536,7 @@ func TestRuntimeController_StopContainer_ContainerNotFound(t *testing.T) {
 func TestRuntimeController_FullLifecycle(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreWithContainer("lifecycle-test")
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -541,7 +613,7 @@ func TestRuntimeController_FullLifecycle(t *testing.T) {
 func TestRuntimeController_IsRunning_NotFoundInCache(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreEmpty() // Empty store - container doesn't exist
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/:name/status", rc.IsRunning)
@@ -559,7 +631,7 @@ func TestRuntimeController_IsRunning_NotFoundInCache(t *testing.T) {
 func TestRuntimeController_StartContainer_NotFoundInCache(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreEmpty() // Empty store - container doesn't exist
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.POST("/runtime/:name/start", rc.StartContainer)
@@ -577,7 +649,7 @@ func TestRuntimeController_StartContainer_NotFoundInCache(t *testing.T) {
 func TestRuntimeController_StopContainer_NotFoundInCache(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreEmpty() // Empty store - container doesn't exist
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.POST("/runtime/:name/stop", rc.StopContainer)
@@ -598,8 +670,8 @@ func boolPtr(b bool) *bool {
 }
 
 // newMockStoreWithActiveContainer creates a mock store with an active container
-func newMockStoreWithActiveContainer(name, url string, active bool) *mockContainerStore {
-	return &mockContainerStore{
+func newMockStoreWithActiveContainer(name, url string, active bool) *mockAppStore {
+	return &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: []repository.Container{
 				{Name: name, URL: url, Active: boolPtr(active)},
@@ -609,7 +681,7 @@ func newMockStoreWithActiveContainer(name, url string, active bool) *mockContain
 }
 
 // newMockStoreWithGroup creates a mock store with a group and its containers
-func newMockStoreWithGroup(groupName string, containerNames []string, groupActive bool, containersActive bool) *mockContainerStore {
+func newMockStoreWithGroup(groupName string, containerNames []string, groupActive bool, containersActive bool) *mockAppStore {
 	containers := make([]repository.Container, len(containerNames))
 	for i, name := range containerNames {
 		containers[i] = repository.Container{
@@ -618,7 +690,7 @@ func newMockStoreWithGroup(groupName string, containerNames []string, groupActiv
 			Active: boolPtr(containersActive),
 		}
 	}
-	return &mockContainerStore{
+	return &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: containers,
 			Groups: []repository.Group{
@@ -630,8 +702,10 @@ func newMockStoreWithGroup(groupName string, containerNames []string, groupActiv
 
 func TestRuntimeController_WaitingPage_ContainerNotFound(t *testing.T) {
 	rt := newMockRuntime()
+	// Simulate runtime error to indicate container doesn't exist in runtime either
+	rt.isRunningErr = errors.New("container not found in runtime")
 	store := newMockStoreEmpty()
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -649,7 +723,7 @@ func TestRuntimeController_WaitingPage_ContainerNotFound(t *testing.T) {
 func TestRuntimeController_WaitingPage_ContainerNotActive(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreWithActiveContainer("my-container", "http://localhost:8080", false)
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -669,7 +743,7 @@ func TestRuntimeController_WaitingPage_ContainerActiveAndRunning(t *testing.T) {
 	rt.runningContainers["my-container"] = true
 
 	store := newMockStoreWithActiveContainer("my-container", "http://localhost:8080", true)
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -695,7 +769,7 @@ func TestRuntimeController_WaitingPage_ContainerActiveNotRunning(t *testing.T) {
 	rt.runningContainers["my-container"] = false
 
 	store := newMockStoreWithActiveContainer("my-container", "http://localhost:8080", true)
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -715,8 +789,10 @@ func TestRuntimeController_WaitingPage_ContainerActiveNotRunning(t *testing.T) {
 
 func TestRuntimeController_WaitingPage_GroupNotFound(t *testing.T) {
 	rt := newMockRuntime()
+	// Simulate runtime error to indicate entity doesn't exist in runtime either
+	rt.isRunningErr = errors.New("container not found in runtime")
 	store := newMockStoreEmpty()
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -734,7 +810,7 @@ func TestRuntimeController_WaitingPage_GroupNotFound(t *testing.T) {
 func TestRuntimeController_WaitingPage_GroupNotActive(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreWithGroup("my-group", []string{"container1", "container2"}, false, true)
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -752,7 +828,7 @@ func TestRuntimeController_WaitingPage_GroupNotActive(t *testing.T) {
 func TestRuntimeController_WaitingPage_GroupActiveSuccess(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreWithGroup("my-group", []string{"container1", "container2"}, true, true)
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -776,7 +852,7 @@ func TestRuntimeController_WaitingPage_GroupActiveSuccess(t *testing.T) {
 func TestRuntimeController_WaitingPage_MissingName(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreEmpty()
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -793,14 +869,14 @@ func TestRuntimeController_WaitingPage_MissingName(t *testing.T) {
 
 func TestRuntimeController_WaitingPage_GroupEmptyContainers(t *testing.T) {
 	rt := newMockRuntime()
-	store := &mockContainerStore{
+	store := &mockAppStore{
 		doc: repository.DataDocument{
 			Groups: []repository.Group{
 				{Name: "empty-group", Container: []string{}, Active: boolPtr(true)},
 			},
 		},
 	}
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -817,7 +893,7 @@ func TestRuntimeController_WaitingPage_GroupEmptyContainers(t *testing.T) {
 
 func TestRuntimeController_WaitingPage_GroupWithNonexistentContainers(t *testing.T) {
 	rt := newMockRuntime()
-	store := &mockContainerStore{
+	store := &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: []repository.Container{}, // No containers defined
 			Groups: []repository.Group{
@@ -825,7 +901,7 @@ func TestRuntimeController_WaitingPage_GroupWithNonexistentContainers(t *testing
 			},
 		},
 	}
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -840,13 +916,13 @@ func TestRuntimeController_WaitingPage_GroupWithNonexistentContainers(t *testing
 	}
 }
 
-// mockContainerStoreWithError simulates a store that fails on Snapshot
-type mockContainerStoreWithError struct {
-	mockContainerStore
+// mockAppStoreWithError simulates a store that fails on Snapshot
+type mockAppStoreWithError struct {
+	mockAppStore
 	snapshotErr error
 }
 
-func (m *mockContainerStoreWithError) Snapshot() (repository.DataDocument, error) {
+func (m *mockAppStoreWithError) Snapshot() (repository.DataDocument, error) {
 	if m.snapshotErr != nil {
 		return repository.DataDocument{}, m.snapshotErr
 	}
@@ -855,10 +931,10 @@ func (m *mockContainerStoreWithError) Snapshot() (repository.DataDocument, error
 
 func TestRuntimeController_WaitingPage_SnapshotError(t *testing.T) {
 	rt := newMockRuntime()
-	store := &mockContainerStoreWithError{
+	store := &mockAppStoreWithError{
 		snapshotErr: errors.New("database connection failed"),
 	}
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -875,14 +951,14 @@ func TestRuntimeController_WaitingPage_SnapshotError(t *testing.T) {
 
 func TestRuntimeController_WaitingPage_ContainerWithNilActive(t *testing.T) {
 	rt := newMockRuntime()
-	store := &mockContainerStore{
+	store := &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: []repository.Container{
 				{Name: "my-container", URL: "http://localhost:8080", Active: nil},
 			},
 		},
 	}
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -900,7 +976,7 @@ func TestRuntimeController_WaitingPage_ContainerWithNilActive(t *testing.T) {
 
 func TestRuntimeController_WaitingPage_GroupWithNilActive(t *testing.T) {
 	rt := newMockRuntime()
-	store := &mockContainerStore{
+	store := &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: []repository.Container{
 				{Name: "container1", URL: "http://localhost:8080", Active: boolPtr(true)},
@@ -910,7 +986,7 @@ func TestRuntimeController_WaitingPage_GroupWithNilActive(t *testing.T) {
 			},
 		},
 	}
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/start/:name", rc.WaitingPage)
@@ -932,7 +1008,7 @@ func TestRuntimeController_ListContainers_Success(t *testing.T) {
 	rt.runningContainers["two"] = true
 
 	store := newMockStoreEmpty()
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/containers", rc.ListContainers)
@@ -959,7 +1035,7 @@ func TestRuntimeController_ListContainers_Error(t *testing.T) {
 	rt := newMockRuntime()
 	rt.listErr = errors.New("list failed")
 	store := newMockStoreEmpty()
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/containers", rc.ListContainers)
@@ -980,7 +1056,7 @@ func TestRuntimeController_AllStats_Success(t *testing.T) {
 	rt.statsMap["container2"] = runtime.ContainerStats{CPUPercent: 50.0, MemoryMB: 256.0}
 
 	active := true
-	store := &mockContainerStore{
+	store := &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: []repository.Container{
 				{Name: "container1", Active: &active},
@@ -989,7 +1065,7 @@ func TestRuntimeController_AllStats_Success(t *testing.T) {
 		},
 	}
 
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/stats", rc.AllStats)
@@ -1035,7 +1111,7 @@ func TestRuntimeController_AllStats_Success(t *testing.T) {
 func TestRuntimeController_AllStats_EmptyStore(t *testing.T) {
 	rt := newMockRuntime()
 	store := newMockStoreEmpty()
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/stats", rc.AllStats)
@@ -1065,7 +1141,7 @@ func TestRuntimeController_AllStats_WithError(t *testing.T) {
 	// container2 will return an error because statsErr is set and container2 is not in statsMap
 
 	active := true
-	store := &mockContainerStore{
+	store := &mockAppStore{
 		doc: repository.DataDocument{
 			Containers: []repository.Container{
 				{Name: "container1", Active: &active},
@@ -1074,7 +1150,7 @@ func TestRuntimeController_AllStats_WithError(t *testing.T) {
 		},
 	}
 
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/stats", rc.AllStats)
@@ -1116,10 +1192,10 @@ func TestRuntimeController_AllStats_WithError(t *testing.T) {
 
 func TestRuntimeController_AllStats_StoreError(t *testing.T) {
 	rt := newMockRuntime()
-	store := &mockContainerStoreWithError{
+	store := &mockAppStoreWithError{
 		snapshotErr: errors.New("store error"),
 	}
-	rc := NewRuntimeController(context.Background(), rt, store)
+	rc := NewRuntimeController(newTestAppCtx(rt, store))
 
 	r := gin.New()
 	r.GET("/runtime/stats", rc.AllStats)

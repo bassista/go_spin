@@ -1,19 +1,15 @@
 package route
 
 import (
-	"context"
-	"time"
-
 	"github.com/bassista/go_spin/internal/api/controller"
 	"github.com/bassista/go_spin/internal/api/middleware"
-	"github.com/bassista/go_spin/internal/cache"
-	"github.com/bassista/go_spin/internal/runtime"
+	"github.com/bassista/go_spin/internal/app"
 	"github.com/gin-gonic/gin"
 )
 
-func NewGroupRouter(baseCtx context.Context, timeout time.Duration, group *gin.RouterGroup, store cache.GroupStore, rt runtime.ContainerRuntime) {
-	gc := controller.NewGroupController(baseCtx, store, rt)
-	timeoutMiddleware := middleware.RequestTimeout(timeout)
+func NewGroupRouter(appCtx *app.App, group *gin.RouterGroup) {
+	gc := controller.NewGroupController(appCtx.BaseCtx, appCtx.Cache, appCtx.Runtime)
+	timeoutMiddleware := middleware.RequestTimeout(appCtx.Config.Server.RequestTimeout)
 
 	group.GET("groups", timeoutMiddleware, gc.AllGroups)
 	group.POST("group", timeoutMiddleware, gc.CreateOrUpdateGroup)

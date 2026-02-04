@@ -1,19 +1,16 @@
 package route
 
 import (
-	"context"
-	"time"
-
 	"github.com/bassista/go_spin/internal/api/controller"
 	"github.com/bassista/go_spin/internal/api/middleware"
-	"github.com/bassista/go_spin/internal/cache"
-	"github.com/bassista/go_spin/internal/runtime"
+	"github.com/bassista/go_spin/internal/app"
 	"github.com/gin-gonic/gin"
 )
 
-func NewContainerRouter(ctx context.Context, timeout time.Duration, group *gin.RouterGroup, store cache.ContainerStore, runtime runtime.ContainerRuntime) {
-	cc := controller.NewContainerController(ctx, store, runtime)
-	timeoutMiddleware := middleware.RequestTimeout(timeout)
+func NewContainerRouter(appCtx *app.App, group *gin.RouterGroup) {
+	cc := controller.NewContainerController(appCtx.BaseCtx, appCtx.Cache, appCtx.Runtime)
+
+	timeoutMiddleware := middleware.RequestTimeout(appCtx.Config.Server.RequestTimeout)
 
 	group.GET("containers", timeoutMiddleware, cc.AllContainers)
 	group.POST("container", timeoutMiddleware, cc.CreateOrUpdateContainer)

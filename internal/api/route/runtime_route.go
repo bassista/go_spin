@@ -1,22 +1,17 @@
 package route
 
 import (
-	"context"
-	"time"
-
 	"github.com/bassista/go_spin/internal/api/controller"
 	"github.com/bassista/go_spin/internal/api/middleware"
-	"github.com/bassista/go_spin/internal/cache"
-	"github.com/bassista/go_spin/internal/runtime"
+	"github.com/bassista/go_spin/internal/app"
 	"github.com/gin-gonic/gin"
 )
 
-func NewRuntimeRouter(baseCtx context.Context, timeout time.Duration, serverTimeout time.Duration, group *gin.RouterGroup, rt runtime.ContainerRuntime, store cache.ContainerStore) {
-	rc := controller.NewRuntimeController(baseCtx, rt, store)
+func NewRuntimeRouter(appCtx *app.App, group *gin.RouterGroup) {
+	rc := controller.NewRuntimeController(appCtx)
 
 	// Apply default timeout middleware to most routes
-	defaultTimeout := middleware.RequestTimeout(timeout)
-
+	defaultTimeout := middleware.RequestTimeout(appCtx.Config.Server.RequestTimeout)
 	group.GET("runtime/:name/status", defaultTimeout, rc.IsRunning)
 	group.POST("runtime/:name/start", defaultTimeout, rc.StartContainer)
 	group.POST("runtime/:name/stop", defaultTimeout, rc.StopContainer)
@@ -24,5 +19,6 @@ func NewRuntimeRouter(baseCtx context.Context, timeout time.Duration, serverTime
 	group.GET("start/:name", defaultTimeout, rc.WaitingPage)
 
 	// Stats endpoint needs a longer timeout since it queries all containers
-	group.GET("runtime/stats", middleware.RequestTimeout(serverTimeout), rc.AllStats)
+	statsRequestTimeout := appCtx.Config.Server.ReadTimeout
+	group.GET("runtime/stats", middleware.RequestTimeout(statsRequestTimeout), rc.AllStats)
 }

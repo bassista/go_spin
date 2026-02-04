@@ -6,8 +6,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bassista/go_spin/internal/api/controller"
+	"github.com/bassista/go_spin/internal/app"
+	"github.com/bassista/go_spin/internal/cache"
+	"github.com/bassista/go_spin/internal/config"
 	"github.com/bassista/go_spin/internal/repository"
 	"github.com/bassista/go_spin/internal/runtime"
 	"github.com/gin-gonic/gin"
@@ -17,7 +21,7 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-// mockContainerStore implements cache.ContainerStore for testing purposes.
+// mockContainerStore implements cache.AppStore for testing purposes.
 type mockContainerStore struct {
 	doc repository.DataDocument
 }
@@ -39,6 +43,66 @@ func (m *mockContainerStore) RemoveContainer(name string) (repository.DataDocume
 		}
 	}
 	return m.doc, nil
+}
+
+func (m *mockContainerStore) GetLastUpdate() int64 {
+	return time.Now().Unix()
+}
+
+func (m *mockContainerStore) IsDirty() bool {
+	return false
+}
+
+func (m *mockContainerStore) Replace(doc repository.DataDocument) error {
+	m.doc = doc
+	return nil
+}
+
+func (m *mockContainerStore) AddGroup(group repository.Group) (repository.DataDocument, error) {
+	m.doc.Groups = append(m.doc.Groups, group)
+	return m.doc, nil
+}
+
+func (m *mockContainerStore) RemoveGroup(name string) (repository.DataDocument, error) {
+	for i, g := range m.doc.Groups {
+		if g.Name == name {
+			m.doc.Groups = append(m.doc.Groups[:i], m.doc.Groups[i+1:]...)
+			break
+		}
+	}
+	return m.doc, nil
+}
+
+func (m *mockContainerStore) AddSchedule(schedule repository.Schedule) (repository.DataDocument, error) {
+	m.doc.Schedules = append(m.doc.Schedules, schedule)
+	return m.doc, nil
+}
+
+func (m *mockContainerStore) RemoveSchedule(id string) (repository.DataDocument, error) {
+	for i, s := range m.doc.Schedules {
+		if s.ID == id {
+			m.doc.Schedules = append(m.doc.Schedules[:i], m.doc.Schedules[i+1:]...)
+			break
+		}
+	}
+	return m.doc, nil
+}
+
+func (m *mockContainerStore) ClearDirty() {}
+
+func (m *mockContainerStore) SetLastUpdate(ts int64) {}
+
+// Verify mockContainerStore implements cache.AppStore
+var _ cache.AppStore = (*mockContainerStore)(nil)
+
+// newTestAppCtx creates an *app.App for testing with the given runtime and store
+func newTestAppCtx(rt runtime.ContainerRuntime, store cache.AppStore) *app.App {
+	return &app.App{
+		Config:  &config.Config{},
+		Cache:   store,
+		Runtime: rt,
+		BaseCtx: context.Background(),
+	}
 }
 
 // mockContainerRuntime implements runtime.ContainerRuntime for testing purposes.
@@ -120,8 +184,9 @@ func TestWaitingServerRouting_ContainerReady(t *testing.T) {
 	rt := newMockRuntime()
 	rt.runningContainers["Deluge"] = false
 
-	rc := controller.NewRuntimeController(context.Background(), rt, store)
-	cc := controller.NewContainerController(context.Background(), store, rt)
+	testApp := newTestAppCtx(rt, store)
+	rc := controller.NewRuntimeController(testApp)
+	cc := controller.NewContainerController(testApp.BaseCtx, testApp.Cache, testApp.Runtime)
 
 	r := gin.New()
 	setupWaitingServerRoutes(r, rc, cc)
@@ -151,8 +216,9 @@ func TestWaitingServerRouting_WaitingPage(t *testing.T) {
 	store := newTestStore()
 	rt := newMockRuntime()
 
-	rc := controller.NewRuntimeController(context.Background(), rt, store)
-	cc := controller.NewContainerController(context.Background(), store, rt)
+	testApp := newTestAppCtx(rt, store)
+	rc := controller.NewRuntimeController(testApp)
+	cc := controller.NewContainerController(testApp.BaseCtx, testApp.Cache, testApp.Runtime)
 
 	r := gin.New()
 	setupWaitingServerRoutes(r, rc, cc)
@@ -180,8 +246,9 @@ func TestWaitingServerRouting_BothRoutesWork(t *testing.T) {
 	rt := newMockRuntime()
 	rt.runningContainers["Deluge"] = false
 
-	rc := controller.NewRuntimeController(context.Background(), rt, store)
-	cc := controller.NewContainerController(context.Background(), store, rt)
+	testApp := newTestAppCtx(rt, store)
+	rc := controller.NewRuntimeController(testApp)
+	cc := controller.NewContainerController(testApp.BaseCtx, testApp.Cache, testApp.Runtime)
 
 	r := gin.New()
 	setupWaitingServerRoutes(r, rc, cc)

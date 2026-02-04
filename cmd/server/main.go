@@ -38,6 +38,8 @@ func main() {
 	}
 	logger.Logger.SetLevel(logLevel)
 	logger.WithComponent("main").Debugf("log level set to: %s", logLevel.String())
+	logger.WithComponent("main").Infof("Waiting server will run on port: %d", cfg.Server.WaitingServerPort)
+	logger.WithComponent("main").Infof("App will run on port: %d", cfg.Server.Port)
 
 	repo, err := repository.NewJSONRepository(cfg.Data.FilePath)
 	if err != nil {
@@ -68,51 +70,21 @@ func main() {
 	gin.DefaultErrorWriter = logger.Logger.Writer()
 	r := gin.Default()
 
-	route.SetupRoutes(r, app)
-	srv := createServer(r, app)
-
 	// Setup and start the secondary waiting server
 	waitingSrv := createWaitingServer(app)
 	go func() {
-		logger.WithComponent("main").Infof("Waiting server will run on port: %d", cfg.Server.WaitingServerPort)
 		if err := waitingSrv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.WaitingServerPort)); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.WithComponent("main").Errorf("Waiting server error: %v", err)
 		}
 	}()
 
-	logger.WithComponent("main").Infof("App will run on port: %d", cfg.Server.Port)
-	if err := srv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	//setup main server routes and start it!
+	route.SetupRoutes(r, app)
+	mainSrv := createGraceHttpServer(app.BaseCtx, "main-server", app.Config.Server, r)
+
+	if err := mainSrv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.WithComponent("main").Fatal(err)
 	}
-
-}
-
-func createServer(r *gin.Engine, app *appctx.App) *httpgrace.Server {
-	// Create slog logger that delegates to logrus
-	slogLogger := slog.New(slog.NewTextHandler(logger.Logger.Writer(), nil))
-
-	srv := httpgrace.NewServer(r,
-		httpgrace.WithTimeout(app.Config.Server.ShutDownTimeout),
-		httpgrace.WithSignals(syscall.SIGTERM, syscall.SIGINT),
-		httpgrace.WithLogger(slogLogger),
-		httpgrace.WithBeforeShutdown(func() {
-			logger.WithComponent("http").Info("Shutting down http server....")
-		}),
-		httpgrace.WithServerOptions(
-			httpgrace.WithReadTimeout(app.Config.Server.ReadTimeout),
-			httpgrace.WithWriteTimeout(app.Config.Server.WriteTimeout),
-			httpgrace.WithIdleTimeout(app.Config.Server.IdleTimeout),
-			func(srv *http.Server) {
-				srv.BaseContext = func(_ net.Listener) context.Context {
-					return app.BaseCtx
-				}
-			},
-			func(srv *http.Server) {
-				srv.ErrorLog = log.New(logger.Logger.Writer(), "[http] ", log.LstdFlags)
-			},
-		),
-	)
-	return srv
 }
 
 // createWaitingServer creates a secondary HTTP server dedicated to serving only the waiting page.
@@ -122,32 +94,36 @@ func createWaitingServer(app *appctx.App) *httpgrace.Server {
 	r.Use(gin.Recovery())
 
 	// Create RuntimeController for the waiting page
-	rc := controller.NewRuntimeController(app.BaseCtx, app.Runtime, app.Cache)
+	rc := controller.NewRuntimeController(app)
 	cc := controller.NewContainerController(app.BaseCtx, app.Cache, app.Runtime)
 
 	r.GET("/container/:name/ready", cc.Ready)
 	r.GET("/:name", rc.WaitingPage)
 
+	return createGraceHttpServer(app.BaseCtx, "waiting-server", app.Config.Server, r)
+}
+
+func createGraceHttpServer(ctx context.Context, name string, serverConfig config.ServerConfig, r *gin.Engine) *httpgrace.Server {
 	slogLogger := slog.New(slog.NewTextHandler(logger.Logger.Writer(), nil))
 
 	srv := httpgrace.NewServer(r,
-		httpgrace.WithTimeout(app.Config.Server.ShutDownTimeout),
+		httpgrace.WithTimeout(serverConfig.ShutDownTimeout),
 		httpgrace.WithSignals(syscall.SIGTERM, syscall.SIGINT),
 		httpgrace.WithLogger(slogLogger),
 		httpgrace.WithBeforeShutdown(func() {
-			logger.WithComponent("http").Info("Shutting down waiting server....")
+			logger.WithComponent("http").Infof("Shutting down %s server....", name)
 		}),
 		httpgrace.WithServerOptions(
-			httpgrace.WithReadTimeout(app.Config.Server.ReadTimeout),
-			httpgrace.WithWriteTimeout(app.Config.Server.WriteTimeout),
-			httpgrace.WithIdleTimeout(app.Config.Server.IdleTimeout),
+			httpgrace.WithReadTimeout(serverConfig.ReadTimeout),
+			httpgrace.WithWriteTimeout(serverConfig.WriteTimeout),
+			httpgrace.WithIdleTimeout(serverConfig.IdleTimeout),
 			func(srv *http.Server) {
 				srv.BaseContext = func(_ net.Listener) context.Context {
-					return app.BaseCtx
+					return ctx
 				}
 			},
 			func(srv *http.Server) {
-				srv.ErrorLog = log.New(logger.Logger.Writer(), "[waiting-http] ", log.LstdFlags)
+				srv.ErrorLog = log.New(logger.Logger.Writer(), fmt.Sprintf("[%s] ", name), log.LstdFlags)
 			},
 		),
 	)

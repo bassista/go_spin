@@ -1,8 +1,17 @@
 # Agent Knowledge Base - go_spin
 
+## Panoramica del Progetto
+**go_spin** è un'applicazione Go per la gestione schedulata dei container Docker. Include un'interfaccia Web SPA (Alpine.js) per la gestione visuale e un'API REST completa per l'accesso programmatico.
 
-## Project Overview
-**go_spin** is a Go application for scheduled management of Docker containers. It includes a SPA Web UI (Alpine.js) for visual management.
+### Funzionalità Principali
+- **Gestione Container**: Registrazione e controllo di container Docker con nomi friendly e URL
+- **Gruppi**: Organizzazione di container in gruppi logici per operazioni batch
+- **Scheduling**: Definizione di schedule temporali con timer multipli per target
+- **Avvio/Stop Automatico**: Container avviati/fermati automaticamente secondo gli schedule
+- **Web UI**: Interfaccia SPA moderna costruita con Alpine.js
+- **API REST**: API JSON completa per accesso programmatico
+- **File Watching**: Ricaricamento automatico configurazione quando il file JSON cambia esternamente
+- **Graceful Shutdown**: Cleanup appropriato alla terminazione dell'applicazione
 
 ## Pattern Architetturali Chiave
 
@@ -19,9 +28,20 @@ Ogni modulo espone interfacce minimali:
 - `AppStore` - interfaccia cache
 - Questo facilita **testing senza Docker** e **mocking**
 
-### 3. Optimistic Locking
+### 3. Hexagonal Architecture (Ports & Adapters)
+- Logica business isolata in `controller/` e `cache/`
+- Dipendenze esterne astratte tramite interfacce
+- Implementazioni runtime (Docker/Memory) sono intercambiabili
+- Pattern Repository astrae la persistenza dati
+
+### 4. Optimistic Locking
 - `metadata.lastUpdate` (Unix ms in config.json) previene race condition su modifiche esterne
 - File-watching con `fsnotify` rileva modifiche esterne e ricarica automaticamente
+
+### 5. Factory Pattern
+- `runtime.NewRuntimeFromConfig(runtimeType, doc)` crea implementazioni runtime appropriate
+- Permette switching configurabile tra Docker e Memory runtime
+- Facilita testing e deployment flessibile
 
 ## Workflow di Caricamento Dati
 1. `JSONRepository.Load()` legge `config/data/config.json`
@@ -30,9 +50,12 @@ Ogni modulo espone interfacce minimali:
 4. Goroutine file-watching per aggiornamenti esterni
 5. Goroutine persistence scheduler per salvataggi periodici
 
-air -c .air.toml              # Linux/macOS
-air -c .air_win.toml          # Windows
-go test ./...
+## Flusso di Elaborazione Richieste
+```
+HTTP Request → Gin Router → Controller → Cache Store → Mark Dirty → Response
+                                     ↓
+                           Background Persister → JSON Repository → File System
+```
 
 ## Build & Development
 
