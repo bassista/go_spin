@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/bassista/go_spin/internal/api/controller"
+	"github.com/bassista/go_spin/internal/api/middleware"
 	route "github.com/bassista/go_spin/internal/api/route"
 	appctx "github.com/bassista/go_spin/internal/app"
 	"github.com/bassista/go_spin/internal/cache"
@@ -68,10 +69,9 @@ func main() {
 	gin.SetMode(cfg.Misc.GinMode)
 	gin.DefaultWriter = logger.Logger.Writer()
 	gin.DefaultErrorWriter = logger.Logger.Writer()
-	r := gin.Default()
 
 	// Setup and start the secondary waiting server
-	waitingSrv := createWaitingServer(app)
+	waitingSrv := createWaitingServer(app, logger.Logger)
 	go func() {
 		if err := waitingSrv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.WaitingServerPort)); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.WithComponent("main").Errorf("Waiting server error: %v", err)
@@ -79,7 +79,7 @@ func main() {
 	}()
 
 	//setup main server routes and start it!
-	route.SetupRoutes(r, app)
+	r := route.SetupRoutes(app, logger.Logger)
 	mainSrv := createGraceHttpServer(app.BaseCtx, "main-server", app.Config.Server, r)
 
 	if err := mainSrv.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port)); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -89,8 +89,9 @@ func main() {
 
 // createWaitingServer creates a secondary HTTP server dedicated to serving only the waiting page.
 // It exposes a single route GET /:name that triggers RuntimeController.WaitingPage.
-func createWaitingServer(app *appctx.App) *httpgrace.Server {
+func createWaitingServer(app *appctx.App, logger *logrus.Logger) *httpgrace.Server {
 	r := gin.New()
+	r.Use(middleware.HoneybadgerMiddleware(logger))
 	r.Use(gin.Recovery())
 
 	// Create RuntimeController for the waiting page

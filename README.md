@@ -4,6 +4,10 @@
 
 go_spin is a Go application for scheduled management of Docker containers. Define containers, groups, and schedules with timers to automatically start/stop containers based on configured times and days.
 
+Thanks to [spinnerr](https://github.com/drgshub/spinnerr) project for the inspiration and design patterns.
+I have decided to rewrite the project in Go to leverage its performance, concurrency model, and strong ecosystem for Docker integration and to create a solution that could be easily integrated with my [Cosmos](https://github.com/azukaar/cosmos-server
+) installation. 
+
 ## ✨ Features
 
 - **Container Management**: Register and manage Docker containers with friendly names and URLs

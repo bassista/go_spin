@@ -13,6 +13,17 @@ func NewUIRouter(r *gin.Engine) {
 	// Serve static assets (JS, CSS, images)
 	r.Static("/ui/assets", "./ui/assets")
 
+	// Serve favicon
+	r.GET("/favicon.ico", func(c *gin.Context) {
+		c.Header("Content-Type", "image/x-icon")
+		c.File("./ui/assets/vite.ico")
+	})
+
+	// Redirect root to /ui
+	r.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/ui")
+	})
+
 	// Serve index.html for the /ui root
 	r.GET("/ui", func(c *gin.Context) {
 		c.File("./ui/index.html")

@@ -19,6 +19,7 @@ COPY . .
 #RUN ./tailwindcss -i cmd/web/styles/input.css -o cmd/web/assets/css/output.css
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build -o /app/main ./cmd/server/main.go
 
+#FROM gcr.io/distroless/static-debian11 AS prod
 FROM alpine:3.20.1 AS prod
 RUN apk add --no-cache su-exec
 
