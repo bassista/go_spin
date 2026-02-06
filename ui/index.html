@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>go_spin - Container Scheduler</title>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#1976d2">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
@@ -601,6 +603,18 @@
 
     </div>
 
-    <script src="/ui/assets/app.js"></script>
+        <script src="/ui/assets/app.js"></script>
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('./service-worker.js')
+                        .then(function(registration) {
+                            console.log('ServiceWorker registration successful:', registration.scope);
+                        }, function(err) {
+                            console.log('ServiceWorker registration failed:', err);
+                        });
+                });
+            }
+        </script>
 </body>
 </html>
