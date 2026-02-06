@@ -13,6 +13,8 @@ function app() {
             showStatsColumns: true,
             // Show Friendly Name and Active columns (responsive for very small screens)
             showMetaColumns: true,
+            // Show Containers/Active columns in Groups tab (responsive <500px)
+            showGroupMetaColumns: true,
             // Stack action buttons under small screens (<400px)
             showStackButtons: false,
             // Container refresh loading state
@@ -41,6 +43,13 @@ function app() {
             friendly_name: '',
             url: '',
             running: false,
+            active: false
+        },
+        // Details modal for a group (read-only)
+        showGroupDetailsModal: false,
+        detailsGroup: {
+            name: '',
+            container: [],
             active: false
         },
         
@@ -102,6 +111,7 @@ function app() {
                 const w = window.innerWidth;
                 this.showStatsColumns = w > 1200;
                 this.showMetaColumns = w >= 600;
+                this.showGroupMetaColumns = w >= 500;
                 this.showStackButtons = w < 400;
             };
             updateResponsive();
@@ -548,6 +558,14 @@ function app() {
                 active: container.active || false
             };
             this.showContainerDetailsModal = true;
+        },
+        openGroupDetails(group) {
+            this.detailsGroup = {
+                name: group.name,
+                container: [...(group.container || [])],
+                active: group.active || false
+            };
+            this.showGroupDetailsModal = true;
         },
         
         async deleteContainer(name) {
