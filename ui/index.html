@@ -113,10 +113,10 @@
                                 <td class="px-4 py-3 font-medium" x-text="container.name"></td>
                                 <td :class="{ 'hidden': !showMetaColumns }" class="px-4 py-3" x-text="container.friendly_name"></td>
                                 <td class="px-4 py-3 hidden lg:table-cell">
-                                    <a @click.stop :href="container.url" target="_blank" class="text-blue-500 hover:underline" x-text="container.url"></a>
+                                    <a @click.stop :href="container.url" target="_blank" class="text-blue-500 hover:underline" x-text="'open'"></a>
                                 </td>
                                 <td class="px-4 py-3 hidden lg:table-cell">
-                                    <a x-show="generateSpinUpUrl(container.friendly_name)" @click.stop :href="generateSpinUpUrl(container.friendly_name)" target="_blank" class="text-blue-500 hover:underline" x-text="generateSpinUpUrl(container.friendly_name)"></a>
+                                    <a x-show="generateSpinUpUrl(container.friendly_name)" @click.stop :href="generateSpinUpUrl(container.friendly_name)" target="_blank" class="text-blue-500 hover:underline" x-text="'start'"></a>
                                     <span x-show="!generateSpinUpUrl(container.friendly_name)" class="text-gray-400">-</span>
                                 </td>
                                 <td :class="{ 'hidden': !showMetaColumns }" class="px-4 py-3">
