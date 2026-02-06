@@ -1,20 +1,12 @@
 {
   "metadata": {
-    "lastUpdate": 1770134175807
+    "lastUpdate": 1770373390450
   },
   "containers": [
     {
       "name": "Deluge",
       "friendly_name": "deluge",
       "url": "https://deluge.lan.asga.uk",
-      "running": true,
-      "active": true,
-      "activatedAt": null
-    },
-    {
-      "name": "airsonic-advanced",
-      "friendly_name": "airsonic",
-      "url": "https://plex:12301",
       "running": true,
       "active": true,
       "activatedAt": null
@@ -31,16 +23,10 @@
       ],
       "name": "media",
       "active": true
-    },
-    {
-      "container": [],
-      "name": "Pippobauso",
-      "active": true
     }
   ],
   "groupOrder": [
-    "media",
-    "Pippobauso"
+    "media"
   ],
   "schedules": [
     {

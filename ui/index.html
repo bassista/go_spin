@@ -13,9 +13,29 @@
         .modal-backdrop { background-color: rgba(0,0,0,0.5); }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .animate-spin { animation: spin 1s linear infinite; }
-        @media (max-width: 599px) {
-            .hide-on-sm { display: none !important; }
+        /* Nascondi icona cancellazione sotto i 400px */
+        @media (max-width: 400px) {
+            .delete-btn { display: none !important; }
         }
+        /* Feedback visivo swipe */
+        .swipe-delete {
+            background-color: #fee2e2 !important;
+            transition: background-color 0.2s;
+        }
+        .swipe-delete-anim {
+            transform: translateX(60px) scale(0.98);
+            opacity: 0.7;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+        .swipe-delete-anim-left {
+            transform: translateX(-60px) scale(0.98);
+            opacity: 0.7;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+        .swipe-track {
+            touch-action: pan-y;
+        }
+        .delete-btn { /* sempre presente, ma nascosta da media query se necessario */ }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -109,7 +129,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         <template x-for="container in filteredSortedContainers" :key="container.name">
-                            <tr @click="openContainerDetails(container)" class="hover:bg-gray-50 cursor-pointer">
+                            <tr @click="openContainerDetails(container)" class="hover:bg-gray-50 cursor-pointer swipe-track" :data-name="container.name" data-type="container">
                                 <td class="px-4 py-3 font-medium" x-text="truncate(container.name,15)"></td>
                                 <td :class="{ 'hidden': !showMetaColumns }" class="px-4 py-3" x-text="truncate(container.friendly_name,15)"></td>
                                 <td class="px-4 py-3 hidden lg:table-cell">
@@ -135,7 +155,7 @@
                                 </td>
                                 <td class="px-4 py-3 space-x-1">
                                     <button @click.stop="openContainerModal(container)" class="text-blue-500 hover:text-blue-700">✏️</button>
-                                    <button @click.stop="deleteContainer(container.name)" class="text-red-500 hover:text-red-700">🗑️</button>
+                                    <button @click.stop="deleteContainer(container.name)" class="text-red-500 hover:text-red-700 delete-btn">🗑️</button>
                                     <button x-show="!container.running" @click.stop="startContainer(container.name)" class="text-green-500 hover:text-green-700">▶️</button>
                                     <button x-show="container.running" @click.stop="stopContainer(container.name)" class="text-orange-500 hover:text-orange-700">⏹️</button>
                                 </td>
@@ -234,7 +254,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         <template x-for="group in filteredSortedGroups" :key="group.name">
-                            <tr>
+                            <tr class="swipe-track" :data-name="group.name" data-type="group">
                                 <td class="px-4 py-3 font-medium" x-text="truncate(group.name,20)" :title="group.name"></td>
                                 <td class="px-4 py-3">
                                     <div class="flex flex-wrap gap-1">
@@ -249,7 +269,7 @@
                                 </td>
                                 <td class="px-4 py-3 space-x-1">
                                     <button @click="openGroupModal(group)" class="text-blue-500 hover:text-blue-700">✏️</button>
-                                    <button @click="deleteGroup(group.name)" class="text-red-500 hover:text-red-700">🗑️</button>
+                                    <button @click="deleteGroup(group.name)" class="text-red-500 hover:text-red-700 delete-btn">🗑️</button>
                                     <button @click="startGroup(group.name)" class="text-green-500 hover:text-green-700" title="Start all containers">▶️</button>
                                     <button @click="stopGroup(group.name)" class="text-orange-500 hover:text-orange-700" title="Stop all containers">⏹️</button>
                                 </td>
@@ -275,7 +295,7 @@
             
             <div class="space-y-4">
                 <template x-for="schedule in schedules" :key="schedule.id">
-                    <div class="bg-white rounded-lg shadow p-4">
+                    <div class="bg-white rounded-lg shadow p-4 swipe-track" :data-name="schedule.id" data-type="schedule">
                         <div class="flex justify-between items-start mb-3">
                             <div>
                                 <h3 class="font-semibold text-lg">
@@ -286,7 +306,7 @@
                             </div>
                             <div class="space-x-1">
                                 <button @click="openScheduleModal(schedule)" class="text-blue-500 hover:text-blue-700">✏️</button>
-                                <button @click="deleteSchedule(schedule.id)" class="text-red-500 hover:text-red-700">🗑️</button>
+                                <button @click="deleteSchedule(schedule.id)" class="text-red-500 hover:text-red-700 delete-btn">🗑️</button>
                             </div>
                         </div>
                         

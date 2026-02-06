@@ -107,10 +107,95 @@ function app() {
             updateResponsive();
             window.addEventListener('resize', updateResponsive);
 
+            // Setup swipe/mouse-drag for delete
+            this.setupSwipeToDelete();
+
             await this.loadAll();
             await this.loadContainerStats();
             this.startAutoRefresh();
             this.startStatsRefresh();
+        },
+
+        // Setup swipe and mouse-drag to delete
+        setupSwipeToDelete() {
+            const self = this;
+            // Helper to get the closest swipe-track element
+            function getSwipeTrackEl(target) {
+                while (target && !target.classList?.contains('swipe-track')) {
+                    target = target.parentElement;
+                }
+                return target;
+            }
+            // Touch events
+            let startX = 0, currentX = 0, dragging = false, swipeEl = null;
+            let mouseDown = false;
+            const threshold = 60; // px
+            function onStart(e) {
+                const touch = e.touches ? e.touches[0] : e;
+                swipeEl = getSwipeTrackEl(e.target);
+                if (!swipeEl) return;
+                startX = touch.clientX;
+                currentX = startX;
+                dragging = true;
+                swipeEl.classList.remove('swipe-delete-anim', 'swipe-delete-anim-left', 'swipe-delete');
+            }
+            function onMove(e) {
+                if (!dragging || !swipeEl) return;
+                const touch = e.touches ? e.touches[0] : e;
+                currentX = touch.clientX;
+                const dx = currentX - startX;
+                if (Math.abs(dx) > 10) {
+                    swipeEl.classList.add('swipe-delete');
+                    if (dx > 0) {
+                        swipeEl.classList.add('swipe-delete-anim');
+                        swipeEl.classList.remove('swipe-delete-anim-left');
+                    } else {
+                        swipeEl.classList.add('swipe-delete-anim-left');
+                        swipeEl.classList.remove('swipe-delete-anim');
+                    }
+                }
+            }
+            function onEnd() {
+                if (!dragging || !swipeEl) return;
+                const dx = currentX - startX;
+                if (Math.abs(dx) > threshold) {
+                    // Execute delete
+                    const name = swipeEl.getAttribute('data-name');
+                    const type = swipeEl.getAttribute('data-type');
+                    if (type === 'container') {
+                        self.deleteContainer(name);
+                    } else if (type === 'group') {
+                        self.deleteGroup(name);
+                    } else if (type === 'schedule') {
+                        self.deleteSchedule(name);
+                    }
+                }
+                // Reset feedback
+                if (swipeEl) {
+                    swipeEl.classList.remove('swipe-delete', 'swipe-delete-anim', 'swipe-delete-anim-left');
+                }
+                dragging = false;
+                swipeEl = null;
+            }
+            // Touch events
+            document.addEventListener('touchstart', onStart, { passive: true });
+            document.addEventListener('touchmove', onMove, { passive: true });
+            document.addEventListener('touchend', onEnd, { passive: true });
+            // Mouse events
+            document.addEventListener('mousedown', function(e) {
+                if (e.button !== 0) return;
+                mouseDown = true;
+                onStart(e);
+            });
+            document.addEventListener('mousemove', function(e) {
+                if (!mouseDown) return;
+                onMove(e);
+            });
+            document.addEventListener('mouseup', function() {
+                if (!mouseDown) return;
+                mouseDown = false;
+                onEnd();
+            });
         },
         
         async loadAll() {
