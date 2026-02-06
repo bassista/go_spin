@@ -110,8 +110,8 @@
                     <tbody class="divide-y divide-gray-200">
                         <template x-for="container in filteredSortedContainers" :key="container.name">
                             <tr @click="openContainerDetails(container)" class="hover:bg-gray-50 cursor-pointer">
-                                <td class="px-4 py-3 font-medium" x-text="container.name"></td>
-                                <td :class="{ 'hidden': !showMetaColumns }" class="px-4 py-3" x-text="container.friendly_name"></td>
+                                <td class="px-4 py-3 font-medium" x-text="truncate(container.name,15)"></td>
+                                <td :class="{ 'hidden': !showMetaColumns }" class="px-4 py-3" x-text="truncate(container.friendly_name,15)"></td>
                                 <td class="px-4 py-3 hidden lg:table-cell">
                                     <a @click.stop :href="container.url" target="_blank" class="text-blue-500 hover:underline" x-text="'open'"></a>
                                 </td>
