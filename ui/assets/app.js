@@ -100,7 +100,7 @@ function app() {
             // initialize responsive state and listen to resize
             const updateResponsive = () => {
                 const w = window.innerWidth;
-                this.showStatsColumns = w >= 800;
+                this.showStatsColumns = w > 1200;
                 this.showMetaColumns = w >= 600;
                 this.showStackButtons = w < 400;
             };
